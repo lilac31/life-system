@@ -123,7 +123,10 @@ class DataSyncService {
       await this.getUserId();
       
       const token = this.getApiKey();
-      console.log('开始上传数据到GitHub Gist，用户:', this.githubUsername, 'gistId:', this.gistId);
+      console.log('开始上传数据到GitHub Gist，用户:', this.githubUsername);
+      
+      // 查找现有Gist
+      await this.findUserGist();
       
       const gistData = {
         description: `Life System Schedule Data - ${this.githubUsername || 'User'}`,
@@ -149,6 +152,7 @@ class DataSyncService {
       
       if (this.gistId) {
         // 更新现有gist
+        console.log('更新现有Gist:', this.gistId);
         response = await fetch(`https://api.github.com/gists/${this.gistId}`, {
           method: 'PATCH',
           headers,
@@ -156,6 +160,7 @@ class DataSyncService {
         });
       } else {
         // 创建新gist
+        console.log('创建新Gist');
         response = await fetch('https://api.github.com/gists', {
           method: 'POST',
           headers,
@@ -172,17 +177,87 @@ class DataSyncService {
       const result = await response.json();
       console.log('上传响应:', result);
       
-      if (!this.gistId) {
-        this.gistId = result.id;
-        localStorage.setItem('gist_id', result.id);
-        console.log('保存新的Gist ID:', result.id);
-      }
+      // 无论创建还是更新，都保存最新的Gist ID
+      this.gistId = result.id;
+      localStorage.setItem('gist_id', result.id);
+      console.log('保存Gist ID:', result.id);
 
       this.setSyncStatus('success');
       return result;
     } catch (error) {
       console.error('Cloud upload failed:', error);
       this.setSyncStatus('error');
+      throw error;
+    }
+  }
+
+  // 查找用户的Gist
+  async findUserGist() {
+    // 确保已获取用户ID
+    await this.getUserId();
+    
+    const token = this.getApiKey();
+    console.log('查找用户的Gist，用户:', this.githubUsername);
+    
+    // 首先检查本地是否已有gistId
+    const localGistId = localStorage.getItem('gist_id');
+    if (localGistId) {
+      console.log('找到本地存储的Gist ID:', localGistId);
+      try {
+        // 验证本地存储的Gist是否有效
+        const response = await fetch(`https://api.github.com/gists/${localGistId}`, {
+          headers: {
+            'Authorization': `token ${token}`
+          }
+        });
+        
+        if (response.ok) {
+          const result = await response.json();
+          // 检查这个Gist是否属于当前用户
+          if (result.description.includes(`Life System Schedule Data - ${this.githubUsername}`)) {
+            console.log('本地Gist有效且属于当前用户');
+            return result;
+          }
+        }
+      } catch (error) {
+        console.warn('验证本地Gist失败:', error);
+      }
+    }
+    
+    // 如果本地Gist无效，则查找用户的Gists
+    try {
+      console.log('查找用户的Gists列表...');
+      const response = await fetch('https://api.github.com/gists', {
+        headers: {
+          'Authorization': `token ${token}`
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch user gists');
+      }
+      
+      const gists = await response.json();
+      console.log('获取到Gists列表:', gists.length, '个');
+      
+      // 查找属于当前用户的Gist
+      const userGist = gists.find(gist => 
+        gist.description && 
+        gist.description.includes(`Life System Schedule Data - ${this.githubUsername}`)
+      );
+      
+      if (userGist) {
+        console.log('找到用户的Gist:', userGist.id);
+        // 更新本地存储
+        localStorage.setItem('gist_id', userGist.id);
+        this.gistId = userGist.id;
+        return userGist;
+      }
+      
+      console.log('未找到用户的Gist，可能需要创建新的');
+      return null;
+    } catch (error) {
+      console.error('查找用户Gist失败:', error);
       throw error;
     }
   }
@@ -194,36 +269,24 @@ class DataSyncService {
       await this.getUserId();
       
       const token = this.getApiKey();
-      const gistId = localStorage.getItem('gist_id');
-      console.log('尝试下载云端数据，用户:', this.githubUsername, 'gistId:', gistId);
+      console.log('尝试下载云端数据，用户:', this.githubUsername);
       
-      if (!gistId) {
-        console.log('没有找到Gist ID，可能是首次使用');
+      // 查找用户的Gist
+      const gist = await this.findUserGist();
+      
+      if (!gist) {
+        console.log('未找到用户的Gist，可能是首次使用');
         throw new Error('No cloud data found');
       }
-
-      const response = await fetch(`https://api.github.com/gists/${gistId}`, {
-        headers: {
-          'Authorization': `token ${token}`
-        }
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('下载请求失败:', response.status, errorText);
-        throw new Error(`Failed to download data from cloud: ${response.status} ${errorText}`);
-      }
-
-      const result = await response.json();
-      console.log('下载到的Gist数据:', result);
       
       // 获取文件内容
-      const fileContent = result.files['schedule-data.json']?.content;
+      const fileContent = gist.files['schedule-data.json']?.content;
       if (!fileContent) {
         throw new Error('No data file found in gist');
       }
       
       const parsedData = JSON.parse(fileContent);
+      console.log('下载到的Gist数据:', parsedData);
       
       // 确保数据来自同一GitHub用户
       // 首先检查用户ID是否匹配
