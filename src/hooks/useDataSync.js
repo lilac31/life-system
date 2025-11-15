@@ -18,15 +18,25 @@ export const useScheduleData = () => {
     }
   }, []);
 
-  // 保存数据
-  const saveData = useCallback((newData) => {
+  // 保存数据并尝试同步到云端
+  const saveData = useCallback((newData, skipSync = false) => {
     try {
       dataAPI.saveData(newData);
       setData(newData);
+      
+      // 如果在线且没有跳过同步，尝试自动同步到云端
+      if (isOnline && !skipSync) {
+        // 使用异步方式同步，不阻塞用户操作
+        setTimeout(() => {
+          manualSync().catch(error => {
+            console.warn('自动同步失败:', error);
+          });
+        }, 1000); // 延迟1秒，避免频繁同步
+      }
     } catch (error) {
       console.error('Failed to save schedule data:', error);
     }
-  }, []);
+  }, [isOnline, manualSync]);
 
   // 获取特定周的数据
   const getWeekData = useCallback((weekKey) => {
@@ -59,6 +69,23 @@ export const useScheduleData = () => {
     loadData(); // 重新加载数据
   }, [loadData]);
 
+  // 创建一个立即同步数据的函数，用于批量更新时避免多次同步
+  const saveDataWithImmediateSync = useCallback((newData) => {
+    try {
+      dataAPI.saveData(newData);
+      setData(newData);
+      
+      // 如果在线，立即同步到云端
+      if (isOnline) {
+        manualSync().catch(error => {
+          console.warn('立即同步失败:', error);
+        });
+      }
+    } catch (error) {
+      console.error('Failed to save schedule data:', error);
+    }
+  }, [isOnline, manualSync]);
+
   // 初始化加载数据
   useEffect(() => {
     loadData();
@@ -87,6 +114,7 @@ export const useScheduleData = () => {
     lastSync,
     loadData,
     saveData,
+    saveDataWithImmediateSync,
     getWeekData,
     saveWeekData,
     addImportantTask,
