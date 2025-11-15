@@ -18,27 +18,34 @@ function App() {
   // 初始化数据
   useEffect(() => {
     // 检查是否已设置云同步
+    const hasGithubToken = localStorage.getItem('github_token');
     const hasApiKey = localStorage.getItem('jsonbin_api_key');
     const hasSkippedSync = localStorage.getItem('cloud_sync_enabled') === 'false';
     
-    // 如果没有API密钥且没有跳过设置，显示设置界面
-    if (!hasApiKey && !hasSkippedSync) {
+    // 如果没有任何API密钥且没有跳过设置，显示设置界面
+    if (!hasGithubToken && !hasApiKey && !hasSkippedSync) {
       console.log('未设置API密钥，显示设置界面');
       setShowSetup(true);
-    } else if (hasApiKey) {
-      console.log('已设置API密钥，尝试自动同步');
-      // 尝试自动同步
-      setTimeout(() => {
-        try {
-          dataSyncService.syncData().then(result => {
-            console.log('启动时同步结果:', result);
-          }).catch(error => {
-            console.warn('启动时同步失败:', error);
-          });
-        } catch (error) {
-          console.warn('同步服务不可用:', error);
-        }
-      }, 2000);
+    } else if ((hasGithubToken || hasApiKey)) {
+      console.log('已设置API密钥，获取用户信息并尝试自动同步');
+      // 确保获取用户信息后再尝试自动同步
+      dataSyncService.getUserId().then(userId => {
+        console.log('获取到用户ID:', userId);
+        // 尝试自动同步
+        setTimeout(() => {
+          try {
+            dataSyncService.syncData().then(result => {
+              console.log('启动时同步结果:', result);
+            }).catch(error => {
+              console.warn('启动时同步失败:', error);
+            });
+          } catch (error) {
+            console.warn('同步服务不可用:', error);
+          }
+        }, 2000);
+      }).catch(error => {
+        console.error('获取用户信息失败:', error);
+      });
     }
     
     // 加载本地数据
@@ -51,6 +58,18 @@ function App() {
       const defaultData = dataAPI.getAllData();
       dataAPI.saveData(defaultData);
     }
+  }, []);
+
+  // 监听显示云同步设置的事件
+  useEffect(() => {
+    const handleShowCloudSetup = () => {
+      setShowSetup(true);
+    };
+
+    window.addEventListener('show-cloud-setup', handleShowCloudSetup);
+    return () => {
+      window.removeEventListener('show-cloud-setup', handleShowCloudSetup);
+    };
   }, []);
 
   const addTask = (newTask) => {

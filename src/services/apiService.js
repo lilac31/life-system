@@ -11,21 +11,51 @@ const STORAGE_KEYS = {
 // 数据同步服务 - 使用GitHub Gist作为免费云存储
 class DataSyncService {
   constructor() {
-    this.userId = this.getUserId();
+    this.userId = null;
     this.gistId = null;
+    this.githubUsername = null;
   }
 
-  // 获取或创建用户ID
-  getUserId() {
+  // 获取或创建用户ID - 现在基于GitHub用户信息
+  async getUserId() {
+    // 如果已经有用户ID且是GitHub用户ID，直接返回
+    if (this.userId && this.userId.startsWith('github_user_')) {
+      return this.userId;
+    }
+    
+    try {
+      // 获取GitHub用户信息
+      const token = this.getApiKey();
+      const response = await fetch('https://api.github.com/user', {
+        headers: {
+          'Authorization': `token ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const userData = await response.json();
+        this.githubUsername = userData.login;
+        // 使用GitHub用户ID作为唯一标识
+        const userId = `github_user_${userData.id}`;
+        localStorage.setItem(STORAGE_KEYS.USER_ID, userId);
+        localStorage.setItem('github_username', userData.login);
+        console.log('获取GitHub用户ID:', userId, '用户名:', userData.login);
+        this.userId = userId;
+        return userId;
+      }
+    } catch (error) {
+      console.error('获取GitHub用户信息失败:', error);
+    }
+    
+    // 如果无法获取GitHub用户信息，生成一个随机ID
     let userId = localStorage.getItem(STORAGE_KEYS.USER_ID);
     if (!userId) {
-      // 使用固定的用户ID，确保不同浏览器可以使用相同的ID
-      userId = 'life_system_user_2025';
+      userId = `temp_user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       localStorage.setItem(STORAGE_KEYS.USER_ID, userId);
-      console.log('创建新的用户ID:', userId);
-    } else {
-      console.log('使用现有用户ID:', userId);
+      console.log('创建临时用户ID:', userId);
     }
+    this.userId = userId;
     return userId;
   }
 
@@ -72,7 +102,7 @@ class DataSyncService {
 
   // 获取API密钥
   getApiKey() {
-    // 尝试从localStorage获取
+    // 尝试从localStorage获取GitHub token
     const savedKey = localStorage.getItem('github_token');
     if (savedKey) {
       return savedKey;
@@ -89,17 +119,21 @@ class DataSyncService {
   // 上传数据到GitHub Gist
   async uploadToCloud(data) {
     try {
+      // 确保已获取用户ID
+      await this.getUserId();
+      
       const token = this.getApiKey();
-      console.log('开始上传数据到GitHub Gist，gistId:', this.gistId);
+      console.log('开始上传数据到GitHub Gist，用户:', this.githubUsername, 'gistId:', this.gistId);
       
       const gistData = {
-        description: 'Life System Schedule Data',
+        description: `Life System Schedule Data - ${this.githubUsername || 'User'}`,
         public: false,
         files: {
           'schedule-data.json': {
             content: JSON.stringify({
               data,
               userId: this.userId,
+              githubUsername: this.githubUsername,
               lastUpdated: new Date().toISOString()
             })
           }
@@ -156,9 +190,12 @@ class DataSyncService {
   // 从GitHub Gist下载数据
   async downloadFromCloud() {
     try {
+      // 确保已获取用户ID
+      await this.getUserId();
+      
       const token = this.getApiKey();
       const gistId = localStorage.getItem('gist_id');
-      console.log('尝试下载云端数据，gistId:', gistId);
+      console.log('尝试下载云端数据，用户:', this.githubUsername, 'gistId:', gistId);
       
       if (!gistId) {
         console.log('没有找到Gist ID，可能是首次使用');
@@ -188,12 +225,27 @@ class DataSyncService {
       
       const parsedData = JSON.parse(fileContent);
       
-      // 确保数据来自同一用户
+      // 确保数据来自同一GitHub用户
+      // 首先检查用户ID是否匹配
       if (parsedData.userId === this.userId) {
         this.setSyncStatus('success');
         return parsedData.data;
-      } else {
-        console.log('数据不属于当前用户:', parsedData.userId, 'vs', this.userId);
+      } 
+      // 如果用户ID不匹配，但都是GitHub用户，则检查用户名
+      else if (this.githubUsername && parsedData.githubUsername === this.githubUsername) {
+        console.log('用户ID不匹配但用户名匹配，更新用户ID');
+        // 更新本地存储的用户ID为云端存储的用户ID
+        this.userId = parsedData.userId;
+        localStorage.setItem(STORAGE_KEYS.USER_ID, parsedData.userId);
+        this.setSyncStatus('success');
+        return parsedData.data;
+      }
+      // 如果都不匹配，则表示数据不属于当前用户
+      else {
+        console.log('数据不属于当前用户:', {
+          local: { userId: this.userId, username: this.githubUsername },
+          cloud: { userId: parsedData.userId, username: parsedData.githubUsername }
+        });
         throw new Error('Data does not belong to current user');
       }
     } catch (error) {
@@ -248,7 +300,10 @@ class DataSyncService {
   // 同步数据
   async syncData() {
     try {
-      console.log('开始同步数据...');
+      // 确保已获取用户ID
+      await this.getUserId();
+      
+      console.log('开始同步数据...用户:', this.githubUsername);
       const localData = this.getLocalData();
       console.log('本地数据:', localData);
       
@@ -371,14 +426,20 @@ export const dataAPI = {
   },
 
   // 保存数据
-  saveData: (data) => {
+  saveData: async (data) => {
     dataSyncService.saveLocalData(data);
     
     // 如果在线，尝试同步到云端
     if (navigator.onLine) {
-      dataSyncService.uploadToCloud(data).catch(err => {
-        console.warn('Background sync failed, will retry later');
-      });
+      // 确保已获取用户ID
+      try {
+        await dataSyncService.getUserId();
+        dataSyncService.uploadToCloud(data).catch(err => {
+          console.warn('Background sync failed, will retry later');
+        });
+      } catch (error) {
+        console.warn('无法获取用户信息，跳过同步:', error);
+      }
     }
   },
 
@@ -393,35 +454,47 @@ export const dataAPI = {
   },
 
   // 保存特定周的数据
-  saveWeekData: (weekKey, weekData) => {
+  saveWeekData: async (weekKey, weekData) => {
     const data = dataSyncService.getLocalData();
     data.weeks[weekKey] = weekData;
     dataSyncService.saveLocalData(data);
     
     // 如果在线，尝试同步到云端
     if (navigator.onLine) {
-      dataSyncService.uploadToCloud(data).catch(err => {
-        console.warn('Background sync failed, will retry later');
-      });
+      // 确保已获取用户ID
+      try {
+        await dataSyncService.getUserId();
+        dataSyncService.uploadToCloud(data).catch(err => {
+          console.warn('Background sync failed, will retry later');
+        });
+      } catch (error) {
+        console.warn('无法获取用户信息，跳过同步:', error);
+      }
     }
   },
 
   // 添加重要任务
-  addImportantTask: (task) => {
+  addImportantTask: async (task) => {
     const data = dataSyncService.getLocalData();
     if (!data.importantTasks) data.importantTasks = [];
     data.importantTasks.push(task);
     dataSyncService.saveLocalData(data);
     
     if (navigator.onLine) {
-      dataSyncService.uploadToCloud(data).catch(err => {
-        console.warn('Background sync failed, will retry later');
-      });
+      // 确保已获取用户ID
+      try {
+        await dataSyncService.getUserId();
+        dataSyncService.uploadToCloud(data).catch(err => {
+          console.warn('Background sync failed, will retry later');
+        });
+      } catch (error) {
+        console.warn('无法获取用户信息，跳过同步:', error);
+      }
     }
   },
 
   // 更新重要任务
-  updateImportantTask: (taskId, updates) => {
+  updateImportantTask: async (taskId, updates) => {
     const data = dataSyncService.getLocalData();
     const taskIndex = data.importantTasks.findIndex(t => t.id === taskId);
     if (taskIndex !== -1) {
@@ -429,23 +502,35 @@ export const dataAPI = {
       dataSyncService.saveLocalData(data);
       
       if (navigator.onLine) {
-        dataSyncService.uploadToCloud(data).catch(err => {
-          console.warn('Background sync failed, will retry later');
-        });
+        // 确保已获取用户ID
+        try {
+          await dataSyncService.getUserId();
+          dataSyncService.uploadToCloud(data).catch(err => {
+            console.warn('Background sync failed, will retry later');
+          });
+        } catch (error) {
+          console.warn('无法获取用户信息，跳过同步:', error);
+        }
       }
     }
   },
 
   // 删除重要任务
-  deleteImportantTask: (taskId) => {
+  deleteImportantTask: async (taskId) => {
     const data = dataSyncService.getLocalData();
     data.importantTasks = data.importantTasks.filter(t => t.id !== taskId);
     dataSyncService.saveLocalData(data);
     
     if (navigator.onLine) {
-      dataSyncService.uploadToCloud(data).catch(err => {
-        console.warn('Background sync failed, will retry later');
-      });
+      // 确保已获取用户ID
+      try {
+        await dataSyncService.getUserId();
+        dataSyncService.uploadToCloud(data).catch(err => {
+          console.warn('Background sync failed, will retry later');
+        });
+      } catch (error) {
+        console.warn('无法获取用户信息，跳过同步:', error);
+      }
     }
   }
 };

@@ -1,10 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { useDataSync } from '../services/apiService';
-import { Wifi, WifiOff, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
+import { Wifi, WifiOff, RefreshCw, CheckCircle, AlertCircle, Settings, Trash2 } from 'lucide-react';
 
 const SyncStatus = ({ className = "" }) => {
   const { isOnline, syncStatus, lastSync, manualSync } = useDataSync();
   const [isExpanded, setIsExpanded] = useState(false);
+  
+  // 获取当前用户信息
+  const getCurrentUser = () => {
+    const username = localStorage.getItem('github_username');
+    const userId = localStorage.getItem('user_id');
+    return { username, userId };
+  };
+  
+  const { username, userId } = getCurrentUser();
 
   const getStatusIcon = () => {
     switch (syncStatus) {
@@ -75,6 +84,31 @@ const SyncStatus = ({ className = "" }) => {
     }
   };
 
+  const handleClearToken = () => {
+    if (confirm('确定要清除所有同步配置吗？这将删除云端同步令牌和相关数据，需要重新设置。')) {
+      // 清除所有相关的 localStorage 数据
+      localStorage.removeItem('github_token');
+      localStorage.removeItem('jsonbin_api_key');
+      localStorage.removeItem('gist_id');
+      localStorage.removeItem('bin_id');
+      localStorage.removeItem('sync_provider');
+      localStorage.removeItem('cloud_sync_enabled');
+      localStorage.removeItem('github_username');
+      localStorage.removeItem('github_user_id');
+      localStorage.removeItem('user_id');
+      localStorage.setItem('sync_status', 'pending');
+      
+      // 刷新页面以显示设置界面
+      window.location.reload();
+    }
+  };
+
+  const handleShowSetup = () => {
+    // 触发父组件显示设置界面
+    setIsExpanded(false);
+    window.dispatchEvent(new CustomEvent('show-cloud-setup'));
+  };
+
   return (
     <div className={`relative ${className}`}>
       <button
@@ -88,6 +122,15 @@ const SyncStatus = ({ className = "" }) => {
       {isExpanded && (
         <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 p-4 z-10">
           <div className="space-y-3">
+            {username && (
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">GitHub用户:</span>
+                <div className="flex items-center gap-1 text-blue-600 dark:text-blue-400">
+                  <span className="text-sm">{username}</span>
+                </div>
+              </div>
+            )}
+            
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium">网络状态:</span>
               <div className={`flex items-center gap-1 ${isOnline ? 'text-green-500' : 'text-red-500'}`}>
@@ -119,9 +162,26 @@ const SyncStatus = ({ className = "" }) => {
               </button>
             )}
             
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={handleShowSetup}
+                className="py-2 px-3 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg font-medium text-sm hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors flex items-center justify-center gap-1"
+              >
+                <Settings size={14} />
+                <span>设置</span>
+              </button>
+              <button
+                onClick={handleClearToken}
+                className="py-2 px-3 bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-400 rounded-lg font-medium text-sm hover:bg-red-200 dark:hover:bg-red-900/30 transition-colors flex items-center justify-center gap-1"
+              >
+                <Trash2 size={14} />
+                <span>清除</span>
+              </button>
+            </div>
+            
             <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
               <p className="text-xs text-gray-500">
-                数据会自动同步到云端，确保在不同设备上访问时保持一致。
+                数据会自动同步到云端，确保在不同设备上访问时保持一致。如遇到问题，可清除后重新设置。
               </p>
             </div>
           </div>

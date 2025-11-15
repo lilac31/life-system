@@ -8,10 +8,19 @@ const CloudSyncSetup = ({ isOpen, onClose }) => {
   const [isVerified, setIsVerified] = useState(false);
   const [error, setError] = useState('');
   const [syncProvider, setSyncProvider] = useState('github'); // 'github' 或 'jsonbin'
+  const [githubUser, setGithubUser] = useState(null); // 存储GitHub用户信息
 
   useEffect(() => {
     // 检查是否已有API密钥
     const savedKey = localStorage.getItem('github_token');
+    const oldApiKey = localStorage.getItem('jsonbin_api_key');
+    
+    // 如果存在旧的API密钥，清除它们
+    if (oldApiKey) {
+      localStorage.removeItem('jsonbin_api_key');
+      localStorage.removeItem('bin_id');
+    }
+    
     if (savedKey) {
       setApiToken(savedKey);
       setIsVerified(true);
@@ -47,22 +56,37 @@ const CloudSyncSetup = ({ isOpen, onClose }) => {
 
         const userData = await response.json();
         console.log('GitHub用户验证成功:', userData);
-
-        // 保存GitHub令牌
-        localStorage.setItem('github_token', apiToken);
-        localStorage.setItem('sync_provider', 'github');
         
-        // 清除旧的bin ID，避免混淆
+        // 保存用户信息到状态
+        setGithubUser(userData);
+
+        // 清除所有可能的旧数据，避免格式污染
         localStorage.removeItem('bin_id');
         localStorage.removeItem('jsonbin_api_key');
+        localStorage.removeItem('gist_id');
+        localStorage.removeItem('user_id'); // 清除旧的固定用户ID
         
+        // 保存新的GitHub令牌和用户信息
+        localStorage.setItem('github_token', apiToken);
+        localStorage.setItem('sync_provider', 'github');
+        localStorage.setItem('github_username', userData.login);
+        localStorage.setItem('github_user_id', userData.id.toString());
+        
+        // 提示用户已成功验证
+        setError('');
         setIsVerified(true);
+        
+        // 强制更新同步服务中的用户信息
+        dataSyncService.userId = `github_user_${userData.id}`;
+        dataSyncService.githubUsername = userData.login;
         
         // 尝试同步数据
         try {
           await dataSyncService.syncData();
+          console.log('初始同步成功');
         } catch (error) {
           console.warn('初始同步失败:', error);
+          setError('验证成功，但初始同步失败，请稍后手动同步');
         }
       }
     } catch (err) {
@@ -110,6 +134,25 @@ const CloudSyncSetup = ({ isOpen, onClose }) => {
             <p className="text-sm text-gray-600 dark:text-gray-400">
               选择同步服务，在不同设备间同步数据
             </p>
+            
+            {/* 显示已验证的用户信息 */}
+            {githubUser && (
+              <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+                <p className="text-sm text-green-800 dark:text-green-200">
+                  已验证为 GitHub 用户: <span className="font-semibold">{githubUser.login}</span>
+                </p>
+              </div>
+            )}
+            
+            {/* 如果检测到之前的配置，显示提示 */}
+            {!githubUser && (localStorage.getItem('github_token') || localStorage.getItem('jsonbin_api_key')) && (
+              <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
+                <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                  检测到之前的同步配置，可能是由于数据格式问题导致同步失败。
+                  请重新配置您的访问令牌以解决此问题。
+                </p>
+              </div>
+            )}
           </div>
 
           {/* 同步服务选择 */}
