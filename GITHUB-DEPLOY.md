@@ -7,7 +7,7 @@
 #### 1. 创建GitHub仓库
 1. 登录 [GitHub](https://github.com)
 2. 点击右上角的 "+" 号，选择 "New repository"
-3. 填写仓库名称（建议：`personal-schedule-manager`）
+3. 填写仓库名称（建议：`life-system`）
 4. 选择 "Public" 或 "Private"
 5. 勾选 "Add a README file"
 6. 点击 "Create repository"
@@ -18,10 +18,10 @@
 # 如果还没有Git仓库，初始化一个
 git init
 git add .
-git commit -m "Initial commit: 个人日程管理系统"
+git commit -m "Initial commit: 生活管理系统"
 
 # 添加远程仓库（替换为你的GitHub用户名）
-git remote add origin https://github.com/your-username/personal-schedule-manager.git
+git remote add origin https://github.com/your-username/life-system.git
 git branch -M main
 git push -u origin main
 ```
@@ -39,7 +39,7 @@ git push -u origin main
 
 1. 在 "Actions" 选项卡中查看部署进度
 2. 部署完成后，在 "Pages" 设置中会显示访问地址
-3. 访问地址格式为：`https://your-username.github.io/personal-schedule-manager`
+3. 访问地址格式为：`https://your-username.github.io/life-system`
 
 #### 5. 自动更新
 
@@ -121,7 +121,7 @@ GitHub会自动重新部署最新版本！
 
 部署完成后，你可以通过以下地址访问：
 
-- **GitHub Pages地址**：`https://your-username.github.io/personal-schedule-manager`
+- **GitHub Pages地址**：`https://your-username.github.io/life-system`
 - **自定义域名**：如果配置了自定义域名
 
 ---

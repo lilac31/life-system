@@ -12,7 +12,7 @@
 #### 第一步：创建GitHub仓库
 
 1. 点击右上角的 **+** 号，选择 **New repository**
-2. 填写仓库名称：`personal-schedule-manager`
+2. 填写仓库名称：`life-system`
 3. 选择 **Public**（或Private）
 4. 点击 **Create repository**
 
@@ -24,10 +24,10 @@
 # 初始化Git仓库
 git init
 git add .
-git commit -m "Initial commit: 个人日程管理系统"
+git commit -m "Initial commit: 生活管理系统"
 
 # 连接到GitHub仓库
-git remote add origin https://github.com/your-username/personal-schedule-manager.git
+git remote add origin https://github.com/your-username/life-system.git
 git branch -M main
 
 # 推送代码
@@ -46,7 +46,7 @@ git push -u origin main
 部署完成后，你可以通过以下地址访问应用：
 
 ```
-https://your-username.github.io/personal-schedule-manager
+https://your-username.github.io/life-system
 ```
 
 ### 🔄 自动更新

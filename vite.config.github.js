@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
-  base: '/personal-schedule-manager/', // GitHub仓库名称
+  base: '/life-system/', // GitHub仓库名称
   build: {
     outDir: 'dist',
     assetsDir: 'assets',

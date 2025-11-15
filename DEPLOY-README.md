@@ -75,3 +75,14 @@ chmod +x deploy-tencent-cos.sh
 ---
 
 **需要帮助？** 查看 `TENCENT-DEPLOYMENT.md` 获取更详细的部署指南
+
+### 🔄 GitHub 部署更新
+
+如果你需要将项目部署到GitHub而不是腾讯云，可以参考 `GITHUB-DEPLOY.md` 和 `QUICK-DEPLOY.md` 文件。
+
+只需三步即可完成GitHub Pages部署：
+1. 创建 `life-system` 仓库
+2. 推送代码到GitHub
+3. 启用GitHub Pages
+
+完成后访问地址：`https://你的用户名.github.io/life-system`
