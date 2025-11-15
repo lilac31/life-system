@@ -98,15 +98,19 @@ class DataSyncService {
   async uploadToCloud(data) {
     try {
       const apiKey = this.getApiKey();
+      console.log('开始上传数据到云端，binId:', this.binId);
+      
       const headers = {
         'Content-Type': 'application/json',
         'X-Master-Key': apiKey,
-        'X-Bin-Meta': '{"name":"life-system-data"}'
+        'X-Bin-Private': 'false' // 设置为公开，方便访问
       };
 
       let response;
+      let result;
       
       if (this.binId) {
+        console.log('更新现有bin:', this.binId);
         // 更新现有bin
         response = await fetch(`${JSONBIN_BASE_URL}/b/${this.binId}`, {
           method: 'PUT',
@@ -118,6 +122,7 @@ class DataSyncService {
           })
         });
       } else {
+        console.log('创建新bin');
         // 创建新bin
         response = await fetch(`${JSONBIN_BASE_URL}/b`, {
           method: 'POST',
@@ -132,14 +137,17 @@ class DataSyncService {
 
       if (!response.ok) {
         const errorText = await response.text();
+        console.error('上传请求失败:', response.status, errorText);
         throw new Error(`Failed to upload data to cloud: ${response.status} ${errorText}`);
       }
 
-      const result = await response.json();
+      result = await response.json();
+      console.log('上传响应:', result);
       
       if (!this.binId) {
         this.binId = result.id;
         localStorage.setItem('bin_id', result.id);
+        console.log('保存新的bin ID:', result.id);
       }
 
       this.setSyncStatus('success');
@@ -156,29 +164,58 @@ class DataSyncService {
     try {
       const apiKey = this.getApiKey();
       const binId = localStorage.getItem('bin_id');
+      console.log('尝试下载云端数据，binId:', binId);
+      
       if (!binId) {
+        console.log('没有找到bin ID，可能是首次使用');
         throw new Error('No cloud data found');
       }
 
-      const response = await fetch(`${JSONBIN_BASE_URL}/b/${binId}/latest`, {
+      // 首先尝试获取bin列表，确认我们的bin存在
+      try {
+        const binsResponse = await fetch(`${JSONBIN_BASE_URL}/b/`, {
+          headers: {
+            'X-Master-Key': apiKey
+          }
+        });
+        
+        if (binsResponse.ok) {
+          const binsData = await binsResponse.json();
+          console.log('获取到的bins列表:', binsData);
+          
+          // 检查我们的bin是否在列表中
+          const ourBin = binsData.find(bin => bin.id === binId);
+          if (!ourBin) {
+            console.log('我们的bin不在列表中，可能已删除');
+            localStorage.removeItem('bin_id');
+            throw new Error('Bin not found or deleted');
+          }
+        }
+      } catch (listError) {
+        console.warn('获取bin列表失败，继续尝试直接访问:', listError);
+      }
+
+      const response = await fetch(`${JSONBIN_BASE_URL}/b/${binId}`, {
         headers: {
-          'X-Master-Key': apiKey,
-          'X-Access-Key': apiKey // 添加访问密钥头
+          'X-Master-Key': apiKey
         }
       });
 
       if (!response.ok) {
         const errorText = await response.text();
+        console.error('下载请求失败:', response.status, errorText);
         throw new Error(`Failed to download data from cloud: ${response.status} ${errorText}`);
       }
 
       const result = await response.json();
+      console.log('下载到的云端数据:', result);
       
       // 确保数据来自同一用户
       if (result.record && result.record.userId === this.userId) {
         this.setSyncStatus('success');
         return result.record.data;
       } else {
+        console.log('数据不属于当前用户:', result.record?.userId, 'vs', this.userId);
         throw new Error('Data does not belong to current user');
       }
     } catch (error) {
