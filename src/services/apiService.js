@@ -1,185 +1,423 @@
 import { useState, useEffect } from 'react';
 
-// API服务 - 处理与腾讯云服务器的通信
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://your-tencent-cloud-api.com/api';
+// JSONBin.io API配置
+let JSONBIN_API_KEY = ''; // 将从localStorage或环境变量获取
+const JSONBIN_BASE_URL = 'https://api.jsonbin.io/v3';
 
-// 通用请求函数
-const apiRequest = async (endpoint, options = {}) => {
-  try {
-    const url = `${API_BASE_URL}${endpoint}`;
-    
-    // 获取存储的token
-    const token = localStorage.getItem('schedule_token');
-    
-    const defaultOptions = {
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token && { 'Authorization': `Bearer ${token}` }),
-        ...options.headers
-      },
-    };
-    
-    const response = await fetch(url, {
-      ...defaultOptions,
-      ...options,
-    });
-    
-    // 处理401未授权错误
-    if (response.status === 401) {
-      localStorage.removeItem('schedule_token');
-      window.location.href = '/login';
-      return;
-    }
-    
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
-      throw new Error(errorData.message || `API error: ${response.status}`);
-    }
-    
-    return await response.json();
-  } catch (error) {
-    console.error('API request failed:', error);
-    throw error;
-  }
+// 本地存储键名
+const STORAGE_KEYS = {
+  SCHEDULE_DATA: 'schedule_data',
+  USER_ID: 'user_id',
+  SYNC_STATUS: 'sync_status',
+  LAST_SYNC: 'last_sync'
 };
 
-// 认证相关API
-export const authAPI = {
-  // 登录
-  login: async (credentials) => {
-    const data = await apiRequest('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify(credentials)
-    });
+// 数据同步服务
+class DataSyncService {
+  constructor() {
+    this.userId = this.getUserId();
+    this.binId = null;
+  }
+
+  // 获取或创建用户ID
+  getUserId() {
+    let userId = localStorage.getItem(STORAGE_KEYS.USER_ID);
+    if (!userId) {
+      userId = 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+      localStorage.setItem(STORAGE_KEYS.USER_ID, userId);
+    }
+    return userId;
+  }
+
+  // 获取本地数据
+  getLocalData() {
+    const data = localStorage.getItem(STORAGE_KEYS.SCHEDULE_DATA);
+    return data ? JSON.parse(data) : this.getDefaultData();
+  }
+
+  // 获取默认数据结构
+  getDefaultData() {
+    return {
+      weeks: {},
+      importantTasks: [],
+      quickTasks: {},
+      timeRecords: [],
+      settings: {
+        weekStart: 1, // 1表示周一，0表示周日
+        timeTrackingEnabled: true,
+        theme: 'light'
+      }
+    };
+  }
+
+  // 保存本地数据
+  saveLocalData(data) {
+    localStorage.setItem(STORAGE_KEYS.SCHEDULE_DATA, JSON.stringify(data));
+    this.setSyncStatus('pending');
+  }
+
+  // 设置同步状态
+  setSyncStatus(status) {
+    localStorage.setItem(STORAGE_KEYS.SYNC_STATUS, status);
+    localStorage.setItem(STORAGE_KEYS.LAST_SYNC, new Date().toISOString());
+  }
+
+  // 获取同步状态
+  getSyncStatus() {
+    return {
+      status: localStorage.getItem(STORAGE_KEYS.SYNC_STATUS) || 'pending',
+      lastSync: localStorage.getItem(STORAGE_KEYS.LAST_SYNC)
+    };
+  }
+
+  // 获取API密钥
+  getApiKey() {
+    if (JSONBIN_API_KEY) return JSONBIN_API_KEY;
     
-    if (data.token) {
-      localStorage.setItem('schedule_token', data.token);
+    // 尝试从localStorage获取
+    const savedKey = localStorage.getItem('jsonbin_api_key');
+    if (savedKey) {
+      JSONBIN_API_KEY = savedKey;
+      return savedKey;
     }
     
-    return data;
-  },
-  
-  // 注册
-  register: async (userData) => {
-    return apiRequest('/auth/register', {
-      method: 'POST',
-      body: JSON.stringify(userData)
-    });
-  },
-  
-  // 登出
-  logout: () => {
-    localStorage.removeItem('schedule_token');
-  },
-  
-  // 检查认证状态
-  checkAuth: async () => {
+    // 尝试从环境变量获取
+    if (import.meta.env.VITE_JSONBIN_API_KEY) {
+      JSONBIN_API_KEY = import.meta.env.VITE_JSONBIN_API_KEY;
+      return JSONBIN_API_KEY;
+    }
+    
+    throw new Error('No API key configured');
+  }
+
+  // 上传数据到JSONBin
+  async uploadToCloud(data) {
     try {
-      return await apiRequest('/auth/me');
+      const apiKey = this.getApiKey();
+      const headers = {
+        'Content-Type': 'application/json',
+        'X-Master-Key': apiKey
+      };
+
+      let response;
+      
+      if (this.binId) {
+        // 更新现有bin
+        response = await fetch(`${JSONBIN_BASE_URL}/b/${this.binId}`, {
+          method: 'PUT',
+          headers,
+          body: JSON.stringify(data)
+        });
+      } else {
+        // 创建新bin
+        response = await fetch(`${JSONBIN_BASE_URL}/b`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            data,
+            userId: this.userId
+          })
+        });
+      }
+
+      if (!response.ok) {
+        throw new Error('Failed to upload data to cloud');
+      }
+
+      const result = await response.json();
+      
+      if (!this.binId) {
+        this.binId = result.id;
+        localStorage.setItem('bin_id', result.id);
+      }
+
+      this.setSyncStatus('success');
+      return result;
     } catch (error) {
-      localStorage.removeItem('schedule_token');
+      console.error('Cloud upload failed:', error);
+      this.setSyncStatus('error');
       throw error;
     }
   }
-};
 
-// 日程数据相关API
-export const scheduleAPI = {
-  // 获取所有日程数据
-  getAllData: async () => {
-    return apiRequest('/schedule');
-  },
-  
-  // 保存所有日程数据
-  saveAllData: async (data) => {
-    return apiRequest('/schedule', {
-      method: 'POST',
-      body: JSON.stringify(data)
-    });
-  },
-  
-  // 更新特定日期的任务
-  updateDayTasks: async (date, tasks) => {
-    return apiRequest(`/schedule/day/${date}`, {
-      method: 'PUT',
-      body: JSON.stringify({ tasks })
-    });
-  },
-  
-  // 更新重要任务
-  updateImportantTasks: async (tasks) => {
-    return apiRequest('/schedule/important', {
-      method: 'PUT',
-      body: JSON.stringify({ tasks })
-    });
-  },
-  
-  // 更新快速任务
-  updateQuickTasks: async (weekKey, quickTasks) => {
-    return apiRequest(`/schedule/quick/${weekKey}`, {
-      method: 'PUT',
-      body: JSON.stringify({ quickTasks })
-    });
-  },
-  
-  // 更新时间记录
-  updateTimeRecords: async (timeRecords) => {
-    return apiRequest('/schedule/time-records', {
-      method: 'PUT',
-      body: JSON.stringify({ timeRecords })
-    });
-  }
-};
-
-// 用户设置相关API
-export const settingsAPI = {
-  // 获取用户设置
-  getSettings: async () => {
-    return apiRequest('/settings');
-  },
-  
-  // 保存用户设置
-  saveSettings: async (settings) => {
-    return apiRequest('/settings', {
-      method: 'POST',
-      body: JSON.stringify(settings)
-    });
-  }
-};
-
-// 自定义Hook用于API请求状态管理
-export const useApi = (apiFunc, params = [], immediate = true) => {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(immediate);
-  const [error, setError] = useState(null);
-  
-  const execute = async (...args) => {
-    setLoading(true);
-    setError(null);
+  // 从JSONBin下载数据
+  async downloadFromCloud() {
     try {
-      const result = await apiFunc(...args);
-      setData(result);
+      const apiKey = this.getApiKey();
+      const binId = localStorage.getItem('bin_id');
+      if (!binId) {
+        throw new Error('No cloud data found');
+      }
+
+      const response = await fetch(`${JSONBIN_BASE_URL}/b/${binId}/latest`, {
+        headers: {
+          'X-Master-Key': apiKey
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to download data from cloud');
+      }
+
+      const result = await response.json();
+      
+      // 确保数据来自同一用户
+      if (result.record && result.record.userId === this.userId) {
+        this.setSyncStatus('success');
+        return result.record.data;
+      } else {
+        throw new Error('Data does not belong to current user');
+      }
+    } catch (error) {
+      console.error('Cloud download failed:', error);
+      this.setSyncStatus('error');
+      throw error;
+    }
+  }
+
+  // 合并本地和云端数据
+  mergeData(localData, cloudData) {
+    // 简单的合并策略：优先使用最新修改的数据
+    // 这里可以根据需要实现更复杂的合并逻辑
+    
+    const merged = { ...localData };
+    
+    // 合并weeks数据
+    Object.keys(cloudData.weeks || {}).forEach(weekKey => {
+      if (!localData.weeks[weekKey]) {
+        merged.weeks[weekKey] = cloudData.weeks[weekKey];
+      } else {
+        // 比较更新时间，选择更新的版本
+        const localWeek = localData.weeks[weekKey];
+        const cloudWeek = cloudData.weeks[weekKey];
+        
+        // 合并每日任务
+        Object.keys(cloudWeek.days || {}).forEach(dayKey => {
+          if (!localWeek.days[dayKey]) {
+            localWeek.days[dayKey] = cloudWeek.days[dayKey];
+          }
+        });
+      }
+    });
+    
+    // 合并重要任务
+    if (cloudData.importantTasks && cloudData.importantTasks.length > 0) {
+      const localIds = localData.importantTasks.map(task => task.id);
+      const newTasks = cloudData.importantTasks.filter(task => !localIds.includes(task.id));
+      merged.importantTasks = [...localData.importantTasks, ...newTasks];
+    }
+    
+    // 合并快速任务
+    Object.keys(cloudData.quickTasks || {}).forEach(weekKey => {
+      if (!localData.quickTasks[weekKey]) {
+        merged.quickTasks[weekKey] = cloudData.quickTasks[weekKey];
+      }
+    });
+    
+    return merged;
+  }
+
+  // 同步数据
+  async syncData() {
+    try {
+      const localData = this.getLocalData();
+      
+      // 尝试从云端获取数据
+      try {
+        const cloudData = await this.downloadFromCloud();
+        const mergedData = this.mergeData(localData, cloudData);
+        this.saveLocalData(mergedData);
+        
+        // 上传合并后的数据
+        await this.uploadToCloud(mergedData);
+        
+        return { success: true, data: mergedData, source: 'merged' };
+      } catch (error) {
+        console.warn('Cloud sync failed, uploading local data:', error);
+        
+        // 如果云端数据获取失败，只上传本地数据
+        await this.uploadToCloud(localData);
+        return { success: true, data: localData, source: 'local' };
+      }
+    } catch (error) {
+      console.error('Sync failed completely:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // 检查是否需要同步
+  needsSync() {
+    const { lastSync } = this.getSyncStatus();
+    if (!lastSync) return true;
+    
+    const lastSyncTime = new Date(lastSync).getTime();
+    const now = new Date().getTime();
+    const fiveMinutes = 5 * 60 * 1000; // 5分钟
+    
+    return (now - lastSyncTime) > fiveMinutes;
+  }
+}
+
+// 导出服务实例
+export const dataSyncService = new DataSyncService();
+
+// 自定义Hook用于数据同步
+export const useDataSync = () => {
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [syncStatus, setSyncStatus] = useState('pending');
+  const [lastSync, setLastSync] = useState(null);
+
+  // 监听网络状态
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  // 自动同步
+  useEffect(() => {
+    if (!isOnline) return;
+
+    const interval = setInterval(async () => {
+      if (dataSyncService.needsSync()) {
+        setSyncStatus('syncing');
+        try {
+          await dataSyncService.syncData();
+          setSyncStatus('success');
+          setLastSync(new Date());
+        } catch (error) {
+          setSyncStatus('error');
+        }
+      }
+    }, 60000); // 每分钟检查一次
+
+    return () => clearInterval(interval);
+  }, [isOnline]);
+
+  // 手动同步
+  const manualSync = async () => {
+    if (!isOnline) {
+      alert('请检查网络连接');
+      return;
+    }
+
+    setSyncStatus('syncing');
+    try {
+      const result = await dataSyncService.syncData();
+      setSyncStatus('success');
+      setLastSync(new Date());
       return result;
-    } catch (err) {
-      setError(err.message || 'Something went wrong');
-      throw err;
-    } finally {
-      setLoading(false);
+    } catch (error) {
+      setSyncStatus('error');
+      throw error;
     }
   };
-  
-  useEffect(() => {
-    if (immediate) {
-      execute(...params);
+
+  return {
+    isOnline,
+    syncStatus,
+    lastSync,
+    manualSync,
+    needsSync: dataSyncService.needsSync()
+  };
+};
+
+// 数据操作API
+export const dataAPI = {
+  // 获取所有数据
+  getAllData: () => {
+    return dataSyncService.getLocalData();
+  },
+
+  // 保存数据
+  saveData: (data) => {
+    dataSyncService.saveLocalData(data);
+    
+    // 如果在线，尝试同步到云端
+    if (navigator.onLine) {
+      dataSyncService.uploadToCloud(data).catch(err => {
+        console.warn('Background sync failed, will retry later');
+      });
     }
-  }, params);
-  
-  return { data, loading, error, execute };
+  },
+
+  // 获取特定周的数据
+  getWeekData: (weekKey) => {
+    const data = dataSyncService.getLocalData();
+    return data.weeks[weekKey] || {
+      days: {},
+      weekNumber: parseInt(weekKey.split('-')[1]),
+      year: parseInt(weekKey.split('-')[0])
+    };
+  },
+
+  // 保存特定周的数据
+  saveWeekData: (weekKey, weekData) => {
+    const data = dataSyncService.getLocalData();
+    data.weeks[weekKey] = weekData;
+    dataSyncService.saveLocalData(data);
+    
+    // 如果在线，尝试同步到云端
+    if (navigator.onLine) {
+      dataSyncService.uploadToCloud(data).catch(err => {
+        console.warn('Background sync failed, will retry later');
+      });
+    }
+  },
+
+  // 添加重要任务
+  addImportantTask: (task) => {
+    const data = dataSyncService.getLocalData();
+    if (!data.importantTasks) data.importantTasks = [];
+    data.importantTasks.push(task);
+    dataSyncService.saveLocalData(data);
+    
+    if (navigator.onLine) {
+      dataSyncService.uploadToCloud(data).catch(err => {
+        console.warn('Background sync failed, will retry later');
+      });
+    }
+  },
+
+  // 更新重要任务
+  updateImportantTask: (taskId, updates) => {
+    const data = dataSyncService.getLocalData();
+    const taskIndex = data.importantTasks.findIndex(t => t.id === taskId);
+    if (taskIndex !== -1) {
+      data.importantTasks[taskIndex] = { ...data.importantTasks[taskIndex], ...updates };
+      dataSyncService.saveLocalData(data);
+      
+      if (navigator.onLine) {
+        dataSyncService.uploadToCloud(data).catch(err => {
+          console.warn('Background sync failed, will retry later');
+        });
+      }
+    }
+  },
+
+  // 删除重要任务
+  deleteImportantTask: (taskId) => {
+    const data = dataSyncService.getLocalData();
+    data.importantTasks = data.importantTasks.filter(t => t.id !== taskId);
+    dataSyncService.saveLocalData(data);
+    
+    if (navigator.onLine) {
+      dataSyncService.uploadToCloud(data).catch(err => {
+        console.warn('Background sync failed, will retry later');
+      });
+    }
+  }
 };
 
 export default {
-  authAPI,
-  scheduleAPI,
-  settingsAPI,
-  useApi
+  dataSyncService,
+  useDataSync,
+  dataAPI
 };

@@ -4,16 +4,36 @@ import WeekView from './components/WeekView';
 import YearView from './components/YearView';
 import ManagementView from './components/ManagementView';
 import AddTaskModal from './components/AddTaskModal';
+import SyncStatus from './components/SyncStatus';
+import CloudSyncSetup from './services/CloudSyncSetup';
+import { dataAPI } from './services/apiService';
 
 function App() {
   const [tasks, setTasks] = useState([]);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [currentView, setCurrentView] = useState('week');
+  const [showSetup, setShowSetup] = useState(false);
 
-  // 初始化空任务数据
+  // 初始化数据
   useEffect(() => {
-    setTasks([]);
+    // 检查是否已设置云同步
+    const hasApiKey = localStorage.getItem('jsonbin_api_key');
+    const hasSkippedSync = localStorage.getItem('cloud_sync_enabled') === 'false';
+    
+    // 如果没有API密钥且没有跳过设置，显示设置界面
+    if (!hasApiKey && !hasSkippedSync) {
+      setShowSetup(true);
+    }
+    
+    // 加载本地数据
+    const allData = dataAPI.getAllData();
+    
+    // 如果本地没有数据，创建默认数据
+    if (!allData.weeks || Object.keys(allData.weeks).length === 0) {
+      const defaultData = dataAPI.getAllData();
+      dataAPI.saveData(defaultData);
+    }
   }, []);
 
   const addTask = (newTask) => {
@@ -73,21 +93,37 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <main className="p-3">
-        <div className="w-full max-w-full mx-auto px-4">
-          {renderCurrentView()}
-        </div>
-      </main>
+    <>
+      <div className="min-h-screen bg-gray-50">
+        <header className="bg-white shadow-sm border-b border-gray-200 px-4 py-2">
+          <div className="flex items-center justify-between">
+            <h1 className="text-xl font-bold text-gray-800">生活管理系统</h1>
+            <SyncStatus />
+          </div>
+        </header>
+        
+        <main className="p-3">
+          <div className="w-full max-w-full mx-auto px-4">
+            {renderCurrentView()}
+          </div>
+        </main>
 
-      {isAddModalOpen && (
-        <AddTaskModal
-          onClose={() => setIsAddModalOpen(false)}
-          onAddTask={addTask}
-          selectedDate={selectedDate}
+        {isAddModalOpen && (
+          <AddTaskModal
+            onClose={() => setIsAddModalOpen(false)}
+            onAddTask={addTask}
+            selectedDate={selectedDate}
+          />
+        )}
+      </div>
+
+      {showSetup && (
+        <CloudSyncSetup
+          isOpen={showSetup}
+          onClose={() => setShowSetup(false)}
         />
       )}
-    </div>
+    </>
   );
 }
 

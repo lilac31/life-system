@@ -2,47 +2,31 @@ import React, { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
 import { format, startOfWeek, addDays, addWeeks, addMonths, getWeek, startOfMonth, endOfMonth, eachWeekOfInterval, isSameWeek } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
-import { useDataSync } from '../hooks/useDataSync';
+import { useScheduleData } from '../hooks/useDataSync';
 import Navigation from './Navigation';
 import DataManager from './DataManager';
 
 const YearView = ({ currentView, onViewChange }) => {
+  const { data, saveData } = useScheduleData();
   const [currentYear, setCurrentYear] = useState(new Date());
   const now = new Date();
   const [expandedMonths, setExpandedMonths] = useState([now.getMonth()]);
-  const { loadFromServer, loadFromLocalStorage } = useDataSync();
   const [weeklyImportantTasks, setWeeklyImportantTasks] = useState({});
   
   // 初始化数据
   useEffect(() => {
-    const initializeData = async () => {
-      try {
-        // 尝试从服务器加载数据
-        const data = await loadFromServer();
-        
-        // 更新组件状态
-        if (data.weeklyImportantTasks) {
-          setWeeklyImportantTasks(data.weeklyImportantTasks);
-        }
-      } catch (error) {
-        console.error('Failed to initialize data:', error);
-        
-        // 如果从服务器加载失败，尝试从本地存储加载
-        const localData = loadFromLocalStorage();
-        if (localData.weeklyImportantTasks) {
-          setWeeklyImportantTasks(localData.weeklyImportantTasks);
-        }
-      }
-    };
-    
-    initializeData();
-  }, [loadFromServer, loadFromLocalStorage]);
+    if (data && data.importantTasks) {
+      setWeeklyImportantTasks(data.importantTasks);
+    }
+  }, [data]);
 
   // 处理数据导入
   const handleDataImport = (importedData) => {
     // 更新组件状态
-    if (importedData.weeklyImportantTasks) {
-      setWeeklyImportantTasks(importedData.weeklyImportantTasks);
+    if (importedData.importantTasks) {
+      setWeeklyImportantTasks(importedData.importantTasks);
+      // 保存到数据同步服务
+      saveData({ ...data, importantTasks: importedData.importantTasks });
     }
   };
 

@@ -8,15 +8,10 @@ import TimeEditModal from './TimeEditModal';
 import DataManager from './DataManager';
 import YearTimeline from './YearTimeline';
 import DataRecovery from './DataRecovery';
-import { useDataSync } from '../hooks/useDataSync';
+import { useScheduleData } from '../hooks/useDataSync';
 
 const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange }) => {
-  // 暂时禁用数据同步
-  const isOnline = true;
-  const isSyncing = false;
-  const lastSyncTime = null;
-  const syncError = null;
-  
+  const { data, saveData, getWeekData, saveWeekData } = useScheduleData();
   const [currentWeek, setCurrentWeek] = useState(new Date());
   const [weeklyImportantTasks, setWeeklyImportantTasks] = useState({});
   const [quickTasks, setQuickTasks] = useState({});
