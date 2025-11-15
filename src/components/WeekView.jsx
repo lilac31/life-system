@@ -11,7 +11,7 @@ import DataRecovery from './DataRecovery';
 import { useScheduleData } from '../hooks/useDataSync';
 
 const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange }) => {
-  const { data, saveData, getWeekData, saveWeekData, isOnline, syncStatus, manualSync } = useScheduleData();
+  const { data, saveData, getWeekData, saveWeekData, isOnline, syncStatus, manualSync, lastSync } = useScheduleData();
   const [currentWeek, setCurrentWeek] = useState(new Date());
   const [isSyncing, setIsSyncing] = useState(false);
   const [weeklyImportantTasks, setWeeklyImportantTasks] = useState({});
@@ -673,7 +673,7 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
                 <div className="flex items-center space-x-1 text-green-500">
                   <Cloud className="w-4 h-4" />
                   <span className="text-xs text-green-500">
-                    {lastSyncTime ? `已同步 ${format(lastSyncTime, 'HH:mm')}` : '已同步'}
+                    {lastSync ? `已同步 ${format(lastSync, 'HH:mm')}` : '已同步'}
                   </span>
                 </div>
               )

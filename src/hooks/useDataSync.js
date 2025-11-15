@@ -4,7 +4,7 @@ import { dataAPI, useDataSync } from '../services/apiService';
 export const useScheduleData = () => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const { isOnline, syncStatus, manualSync } = useDataSync();
+  const { isOnline, syncStatus, manualSync, lastSync } = useDataSync();
 
   // 加载数据
   const loadData = useCallback(() => {
@@ -84,6 +84,7 @@ export const useScheduleData = () => {
     isOnline,
     syncStatus,
     manualSync,
+    lastSync,
     loadData,
     saveData,
     getWeekData,
