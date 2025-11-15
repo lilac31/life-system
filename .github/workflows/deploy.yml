@@ -13,7 +13,7 @@ permissions:
 # 确保同时只有一个部署在运行
 concurrency:
   group: "pages"
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   # 构建作业
