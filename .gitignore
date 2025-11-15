@@ -45,5 +45,3 @@ Thumbs.db
 *.swo
 *~
 
-# GitHub deployment
-.github/workflows/deploy.yml
