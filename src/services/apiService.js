@@ -96,7 +96,8 @@ class DataSyncService {
       const apiKey = this.getApiKey();
       const headers = {
         'Content-Type': 'application/json',
-        'X-Master-Key': apiKey
+        'X-Master-Key': apiKey,
+        'X-Bin-Meta': '{"name":"life-system-data"}'
       };
 
       let response;
@@ -106,7 +107,11 @@ class DataSyncService {
         response = await fetch(`${JSONBIN_BASE_URL}/b/${this.binId}`, {
           method: 'PUT',
           headers,
-          body: JSON.stringify(data)
+          body: JSON.stringify({
+            data,
+            userId: this.userId,
+            lastUpdated: new Date().toISOString()
+          })
         });
       } else {
         // 创建新bin
@@ -115,13 +120,15 @@ class DataSyncService {
           headers,
           body: JSON.stringify({
             data,
-            userId: this.userId
+            userId: this.userId,
+            lastUpdated: new Date().toISOString()
           })
         });
       }
 
       if (!response.ok) {
-        throw new Error('Failed to upload data to cloud');
+        const errorText = await response.text();
+        throw new Error(`Failed to upload data to cloud: ${response.status} ${errorText}`);
       }
 
       const result = await response.json();
@@ -151,12 +158,14 @@ class DataSyncService {
 
       const response = await fetch(`${JSONBIN_BASE_URL}/b/${binId}/latest`, {
         headers: {
-          'X-Master-Key': apiKey
+          'X-Master-Key': apiKey,
+          'X-Access-Key': apiKey // 添加访问密钥头
         }
       });
 
       if (!response.ok) {
-        throw new Error('Failed to download data from cloud');
+        const errorText = await response.text();
+        throw new Error(`Failed to download data from cloud: ${response.status} ${errorText}`);
       }
 
       const result = await response.json();
@@ -220,27 +229,33 @@ class DataSyncService {
   // 同步数据
   async syncData() {
     try {
+      console.log('开始同步数据...');
       const localData = this.getLocalData();
+      console.log('本地数据:', localData);
       
       // 尝试从云端获取数据
       try {
+        console.log('尝试从云端获取数据...');
         const cloudData = await this.downloadFromCloud();
+        console.log('云端数据:', cloudData);
         const mergedData = this.mergeData(localData, cloudData);
         this.saveLocalData(mergedData);
         
         // 上传合并后的数据
+        console.log('上传合并后的数据...');
         await this.uploadToCloud(mergedData);
         
         return { success: true, data: mergedData, source: 'merged' };
       } catch (error) {
-        console.warn('Cloud sync failed, uploading local data:', error);
+        console.warn('云端数据获取失败，只上传本地数据:', error);
         
         // 如果云端数据获取失败，只上传本地数据
+        console.log('只上传本地数据:', localData);
         await this.uploadToCloud(localData);
         return { success: true, data: localData, source: 'local' };
       }
     } catch (error) {
-      console.error('Sync failed completely:', error);
+      console.error('同步完全失败:', error);
       return { success: false, error: error.message };
     }
   }
