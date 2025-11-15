@@ -1,9 +1,5 @@
 import { useState, useEffect } from 'react';
 
-// JSONBin.io API配置
-let JSONBIN_API_KEY = ''; // 将从localStorage或环境变量获取
-const JSONBIN_BASE_URL = 'https://api.jsonbin.io/v3';
-
 // 本地存储键名
 const STORAGE_KEYS = {
   SCHEDULE_DATA: 'schedule_data',
@@ -12,11 +8,11 @@ const STORAGE_KEYS = {
   LAST_SYNC: 'last_sync'
 };
 
-// 数据同步服务
+// 数据同步服务 - 使用GitHub Gist作为免费云存储
 class DataSyncService {
   constructor() {
     this.userId = this.getUserId();
-    this.binId = null;
+    this.gistId = null;
   }
 
   // 获取或创建用户ID
@@ -76,62 +72,60 @@ class DataSyncService {
 
   // 获取API密钥
   getApiKey() {
-    if (JSONBIN_API_KEY) return JSONBIN_API_KEY;
-    
     // 尝试从localStorage获取
-    const savedKey = localStorage.getItem('jsonbin_api_key');
+    const savedKey = localStorage.getItem('github_token');
     if (savedKey) {
-      JSONBIN_API_KEY = savedKey;
       return savedKey;
     }
     
     // 尝试从环境变量获取
-    if (import.meta.env.VITE_JSONBIN_API_KEY) {
-      JSONBIN_API_KEY = import.meta.env.VITE_JSONBIN_API_KEY;
-      return JSONBIN_API_KEY;
+    if (import.meta.env.VITE_GITHUB_TOKEN) {
+      return import.meta.env.VITE_GITHUB_TOKEN;
     }
     
-    throw new Error('No API key configured');
+    throw new Error('No GitHub token configured');
   }
 
-  // 上传数据到JSONBin
+  // 上传数据到GitHub Gist
   async uploadToCloud(data) {
     try {
-      const apiKey = this.getApiKey();
-      console.log('开始上传数据到云端，binId:', this.binId);
+      const token = this.getApiKey();
+      console.log('开始上传数据到GitHub Gist，gistId:', this.gistId);
       
+      const gistData = {
+        description: 'Life System Schedule Data',
+        public: false,
+        files: {
+          'schedule-data.json': {
+            content: JSON.stringify({
+              data,
+              userId: this.userId,
+              lastUpdated: new Date().toISOString()
+            })
+          }
+        }
+      };
+
       const headers = {
-        'Content-Type': 'application/json',
-        'X-Master-Key': apiKey,
-        'X-Bin-Private': 'false' // 设置为公开，方便访问
+        'Authorization': `token ${token}`,
+        'Content-Type': 'application/json'
       };
 
       let response;
-      let result;
       
-      if (this.binId) {
-        console.log('更新现有bin:', this.binId);
-        // 更新现有bin
-        response = await fetch(`${JSONBIN_BASE_URL}/b/${this.binId}`, {
-          method: 'PUT',
+      if (this.gistId) {
+        // 更新现有gist
+        response = await fetch(`https://api.github.com/gists/${this.gistId}`, {
+          method: 'PATCH',
           headers,
-          body: JSON.stringify({
-            data,
-            userId: this.userId,
-            lastUpdated: new Date().toISOString()
-          })
+          body: JSON.stringify(gistData)
         });
       } else {
-        console.log('创建新bin');
-        // 创建新bin
-        response = await fetch(`${JSONBIN_BASE_URL}/b`, {
+        // 创建新gist
+        response = await fetch('https://api.github.com/gists', {
           method: 'POST',
           headers,
-          body: JSON.stringify({
-            data,
-            userId: this.userId,
-            lastUpdated: new Date().toISOString()
-          })
+          body: JSON.stringify(gistData)
         });
       }
 
@@ -141,13 +135,13 @@ class DataSyncService {
         throw new Error(`Failed to upload data to cloud: ${response.status} ${errorText}`);
       }
 
-      result = await response.json();
+      const result = await response.json();
       console.log('上传响应:', result);
       
-      if (!this.binId) {
-        this.binId = result.id;
-        localStorage.setItem('bin_id', result.id);
-        console.log('保存新的bin ID:', result.id);
+      if (!this.gistId) {
+        this.gistId = result.id;
+        localStorage.setItem('gist_id', result.id);
+        console.log('保存新的Gist ID:', result.id);
       }
 
       this.setSyncStatus('success');
@@ -159,45 +153,21 @@ class DataSyncService {
     }
   }
 
-  // 从JSONBin下载数据
+  // 从GitHub Gist下载数据
   async downloadFromCloud() {
     try {
-      const apiKey = this.getApiKey();
-      const binId = localStorage.getItem('bin_id');
-      console.log('尝试下载云端数据，binId:', binId);
+      const token = this.getApiKey();
+      const gistId = localStorage.getItem('gist_id');
+      console.log('尝试下载云端数据，gistId:', gistId);
       
-      if (!binId) {
-        console.log('没有找到bin ID，可能是首次使用');
+      if (!gistId) {
+        console.log('没有找到Gist ID，可能是首次使用');
         throw new Error('No cloud data found');
       }
 
-      // 首先尝试获取bin列表，确认我们的bin存在
-      try {
-        const binsResponse = await fetch(`${JSONBIN_BASE_URL}/b/`, {
-          headers: {
-            'X-Master-Key': apiKey
-          }
-        });
-        
-        if (binsResponse.ok) {
-          const binsData = await binsResponse.json();
-          console.log('获取到的bins列表:', binsData);
-          
-          // 检查我们的bin是否在列表中
-          const ourBin = binsData.find(bin => bin.id === binId);
-          if (!ourBin) {
-            console.log('我们的bin不在列表中，可能已删除');
-            localStorage.removeItem('bin_id');
-            throw new Error('Bin not found or deleted');
-          }
-        }
-      } catch (listError) {
-        console.warn('获取bin列表失败，继续尝试直接访问:', listError);
-      }
-
-      const response = await fetch(`${JSONBIN_BASE_URL}/b/${binId}`, {
+      const response = await fetch(`https://api.github.com/gists/${gistId}`, {
         headers: {
-          'X-Master-Key': apiKey
+          'Authorization': `token ${token}`
         }
       });
 
@@ -208,14 +178,22 @@ class DataSyncService {
       }
 
       const result = await response.json();
-      console.log('下载到的云端数据:', result);
+      console.log('下载到的Gist数据:', result);
+      
+      // 获取文件内容
+      const fileContent = result.files['schedule-data.json']?.content;
+      if (!fileContent) {
+        throw new Error('No data file found in gist');
+      }
+      
+      const parsedData = JSON.parse(fileContent);
       
       // 确保数据来自同一用户
-      if (result.record && result.record.userId === this.userId) {
+      if (parsedData.userId === this.userId) {
         this.setSyncStatus('success');
-        return result.record.data;
+        return parsedData.data;
       } else {
-        console.log('数据不属于当前用户:', result.record?.userId, 'vs', this.userId);
+        console.log('数据不属于当前用户:', parsedData.userId, 'vs', this.userId);
         throw new Error('Data does not belong to current user');
       }
     } catch (error) {

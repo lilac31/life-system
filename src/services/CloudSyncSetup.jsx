@@ -1,25 +1,30 @@
 import React, { useState, useEffect } from 'react';
-import { X, Check, AlertCircle, Key } from 'lucide-react';
+import { X, Check, AlertCircle, Key, Github } from 'lucide-react';
 import { dataSyncService } from './apiService';
 
 const CloudSyncSetup = ({ isOpen, onClose }) => {
-  const [apiKey, setApiKey] = useState('');
+  const [apiToken, setApiToken] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
   const [isVerified, setIsVerified] = useState(false);
   const [error, setError] = useState('');
+  const [syncProvider, setSyncProvider] = useState('github'); // 'github' 或 'jsonbin'
 
   useEffect(() => {
     // 检查是否已有API密钥
-    const savedKey = localStorage.getItem('jsonbin_api_key');
+    const savedKey = localStorage.getItem('github_token');
     if (savedKey) {
-      setApiKey(savedKey);
+      setApiToken(savedKey);
       setIsVerified(true);
     }
+    
+    // 检查之前使用的同步服务
+    const savedProvider = localStorage.getItem('sync_provider') || 'github';
+    setSyncProvider(savedProvider);
   }, []);
 
-  const handleSaveApiKey = async () => {
-    if (!apiKey.trim()) {
-      setError('请输入API密钥');
+  const handleSaveApiToken = async () => {
+    if (!apiToken.trim()) {
+      setError('请输入访问令牌');
       return;
     }
 
@@ -27,37 +32,41 @@ const CloudSyncSetup = ({ isOpen, onClose }) => {
     setError('');
 
     try {
-      // 验证API密钥
-      const response = await fetch('https://api.jsonbin.io/v3/b', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Master-Key': apiKey
-        },
-        body: JSON.stringify({ test: true })
-      });
+      if (syncProvider === 'github') {
+        // 验证GitHub令牌
+        const response = await fetch('https://api.github.com/user', {
+          headers: {
+            'Authorization': `token ${apiToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
 
-      if (!response.ok) {
-        throw new Error('API密钥无效');
-      }
+        if (!response.ok) {
+          throw new Error('访问令牌无效');
+        }
 
-      // 保存API密钥
-      localStorage.setItem('jsonbin_api_key', apiKey);
-      
-      // 更新apiService.js中的API密钥
-      const result = await response.json();
-      localStorage.setItem('bin_id', result.id);
-      
-      setIsVerified(true);
-      
-      // 尝试同步数据
-      try {
-        await dataSyncService.syncData();
-      } catch (error) {
-        console.warn('Initial sync failed:', error);
+        const userData = await response.json();
+        console.log('GitHub用户验证成功:', userData);
+
+        // 保存GitHub令牌
+        localStorage.setItem('github_token', apiToken);
+        localStorage.setItem('sync_provider', 'github');
+        
+        // 清除旧的bin ID，避免混淆
+        localStorage.removeItem('bin_id');
+        localStorage.removeItem('jsonbin_api_key');
+        
+        setIsVerified(true);
+        
+        // 尝试同步数据
+        try {
+          await dataSyncService.syncData();
+        } catch (error) {
+          console.warn('初始同步失败:', error);
+        }
       }
     } catch (err) {
-      setError(err.message || '验证API密钥时出错');
+      setError(err.message || '验证访问令牌时出错');
     } finally {
       setIsVerifying(false);
     }
@@ -66,7 +75,14 @@ const CloudSyncSetup = ({ isOpen, onClose }) => {
   const handleSkip = () => {
     // 设置为离线模式
     localStorage.setItem('cloud_sync_enabled', 'false');
+    localStorage.setItem('sync_provider', 'none');
     onClose();
+  };
+
+  const switchProvider = (provider) => {
+    setSyncProvider(provider);
+    setError('');
+    setIsVerified(false);
   };
 
   return (
@@ -92,56 +108,104 @@ const CloudSyncSetup = ({ isOpen, onClose }) => {
             </div>
             <h3 className="text-lg font-medium">启用云端同步</h3>
             <p className="text-sm text-gray-600 dark:text-gray-400">
-              设置JSONBin.io API密钥，在不同设备间同步数据
+              选择同步服务，在不同设备间同步数据
             </p>
           </div>
 
-          <div className="space-y-3">
-            <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-              <div className="flex items-start gap-2">
-                <AlertCircle size={18} className="text-blue-600 dark:text-blue-400 mt-0.5" />
-                <div className="text-sm">
-                  <p className="font-medium text-blue-900 dark:text-blue-100">如何获取API密钥:</p>
-                  <ol className="mt-1 space-y-1 text-blue-800 dark:text-blue-200 list-decimal list-inside">
-                    <li>访问 <a href="https://jsonbin.io" target="_blank" rel="noopener noreferrer" className="underline">jsonbin.io</a></li>
-                    <li>注册免费账户</li>
-                    <li>在控制台中复制API密钥</li>
-                    <li>将密钥粘贴到下方输入框</li>
-                  </ol>
+          {/* 同步服务选择 */}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium">选择同步服务</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => switchProvider('github')}
+                className={`p-3 rounded-lg border ${
+                  syncProvider === 'github' 
+                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' 
+                    : 'border-gray-300 dark:border-gray-700'
+                }`}
+              >
+                <Github size={20} className="mx-auto mb-1" />
+                <div className="text-xs">GitHub Gist</div>
+                <div className="text-xs text-gray-500">推荐</div>
+              </button>
+              <button
+                onClick={() => switchProvider('jsonbin')}
+                className={`p-3 rounded-lg border ${
+                  syncProvider === 'jsonbin' 
+                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' 
+                    : 'border-gray-300 dark:border-gray-700'
+                }`}
+              >
+                <div className="w-5 h-5 mx-auto mb-1 bg-purple-500 rounded" />
+                <div className="text-xs">JSONBin.io</div>
+                <div className="text-xs text-gray-500">可能不稳定</div>
+              </button>
+            </div>
+          </div>
+
+          {syncProvider === 'github' && (
+            <div className="space-y-3">
+              <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                <div className="flex items-start gap-2">
+                  <AlertCircle size={18} className="text-blue-600 dark:text-blue-400 mt-0.5" />
+                  <div className="text-sm">
+                    <p className="font-medium text-blue-900 dark:text-blue-100">如何获取GitHub访问令牌:</p>
+                    <ol className="mt-1 space-y-1 text-blue-800 dark:text-blue-200 list-decimal list-inside">
+                      <li>访问 <a href="https://github.com/settings/tokens" target="_blank" rel="noopener noreferrer" className="underline">GitHub令牌设置</a></li>
+                      <li>点击"Generate new token (classic)"</li>
+                      <li>输入令牌名称（如：生活管理系统）</li>
+                      <li>选择过期时间（建议：90天）</li>
+                      <li>勾选"gist"权限</li>
+                      <li>生成并复制令牌</li>
+                    </ol>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label htmlFor="api-token" className="block text-sm font-medium">
+                  GitHub 访问令牌
+                </label>
+                <input
+                  id="api-token"
+                  type="password"
+                  value={apiToken}
+                  onChange={(e) => setApiToken(e.target.value)}
+                  placeholder="输入你的访问令牌"
+                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:outline-none ${
+                    error ? 'border-red-500 focus:ring-red-500' : 
+                    isVerified ? 'border-green-500 focus:ring-green-500' : 
+                    'border-gray-300 focus:ring-blue-500 dark:border-gray-700 dark:focus:ring-blue-500'
+                  } bg-white dark:bg-gray-800`}
+                />
+                {error && (
+                  <p className="text-sm text-red-600 dark:text-red-400 flex items-center gap-1">
+                    <AlertCircle size={14} />
+                    {error}
+                  </p>
+                )}
+                {isVerified && (
+                  <p className="text-sm text-green-600 dark:text-green-400 flex items-center gap-1">
+                    <Check size={14} />
+                    访问令牌已验证
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {syncProvider === 'jsonbin' && (
+            <div className="space-y-3">
+              <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
+                <div className="flex items-start gap-2">
+                  <AlertCircle size={18} className="text-yellow-600 dark:text-yellow-400 mt-0.5" />
+                  <div className="text-sm text-yellow-800 dark:text-yellow-200">
+                    JSONBin.io免费版可能不稳定，建议使用GitHub Gist
+                  </div>
                 </div>
               </div>
             </div>
-
-            <div className="space-y-2">
-              <label htmlFor="api-key" className="block text-sm font-medium">
-                JSONBin.io API密钥
-              </label>
-              <input
-                id="api-key"
-                type="password"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder="输入你的API密钥"
-                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:outline-none ${
-                  error ? 'border-red-500 focus:ring-red-500' : 
-                  isVerified ? 'border-green-500 focus:ring-green-500' : 
-                  'border-gray-300 focus:ring-blue-500 dark:border-gray-700 dark:focus:ring-blue-500'
-                } bg-white dark:bg-gray-800`}
-              />
-              {error && (
-                <p className="text-sm text-red-600 dark:text-red-400 flex items-center gap-1">
-                  <AlertCircle size={14} />
-                  {error}
-                </p>
-              )}
-              {isVerified && (
-                <p className="text-sm text-green-600 dark:text-green-400 flex items-center gap-1">
-                  <Check size={14} />
-                  API密钥已验证
-                </p>
-              )}
-            </div>
-          </div>
+          )}
 
           <div className="flex gap-3 pt-4">
             <button
@@ -151,11 +215,11 @@ const CloudSyncSetup = ({ isOpen, onClose }) => {
               跳过（离线模式）
             </button>
             <button
-              onClick={handleSaveApiKey}
+              onClick={handleSaveApiToken}
               disabled={isVerifying}
               className="flex-1 py-2 px-4 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isVerifying ? '验证中...' : '保存密钥'}
+              {isVerifying ? '验证中...' : '保存令牌'}
             </button>
           </div>
 
