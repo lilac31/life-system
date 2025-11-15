@@ -14,6 +14,7 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
   const { data, saveData, getWeekData, saveWeekData, isOnline, syncStatus, manualSync, lastSync } = useScheduleData();
   const [currentWeek, setCurrentWeek] = useState(new Date());
   const [isSyncing, setIsSyncing] = useState(false);
+  const syncError = null; // 暂时设为null，后续可以从syncStatus中获取
   const [weeklyImportantTasks, setWeeklyImportantTasks] = useState({});
   const [quickTasks, setQuickTasks] = useState({});
   const [draggedTask, setDraggedTask] = useState(null);
