@@ -6,7 +6,7 @@ import ManagementView from './components/ManagementView';
 import AddTaskModal from './components/AddTaskModal';
 import SyncStatus from './components/SyncStatus';
 import CloudSyncSetup from './services/CloudSyncSetup';
-import { dataAPI } from './services/apiService';
+import { dataAPI, dataSyncService } from './services/apiService';
 
 function App() {
   const [tasks, setTasks] = useState([]);
@@ -23,14 +23,31 @@ function App() {
     
     // 如果没有API密钥且没有跳过设置，显示设置界面
     if (!hasApiKey && !hasSkippedSync) {
+      console.log('未设置API密钥，显示设置界面');
       setShowSetup(true);
+    } else if (hasApiKey) {
+      console.log('已设置API密钥，尝试自动同步');
+      // 尝试自动同步
+      setTimeout(() => {
+        try {
+          dataSyncService.syncData().then(result => {
+            console.log('启动时同步结果:', result);
+          }).catch(error => {
+            console.warn('启动时同步失败:', error);
+          });
+        } catch (error) {
+          console.warn('同步服务不可用:', error);
+        }
+      }, 2000);
     }
     
     // 加载本地数据
     const allData = dataAPI.getAllData();
+    console.log('加载本地数据:', allData);
     
     // 如果本地没有数据，创建默认数据
     if (!allData.weeks || Object.keys(allData.weeks).length === 0) {
+      console.log('创建默认数据');
       const defaultData = dataAPI.getAllData();
       dataAPI.saveData(defaultData);
     }

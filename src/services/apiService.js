@@ -23,8 +23,12 @@ class DataSyncService {
   getUserId() {
     let userId = localStorage.getItem(STORAGE_KEYS.USER_ID);
     if (!userId) {
-      userId = 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+      // 使用固定的用户ID，确保不同浏览器可以使用相同的ID
+      userId = 'life_system_user_2025';
       localStorage.setItem(STORAGE_KEYS.USER_ID, userId);
+      console.log('创建新的用户ID:', userId);
+    } else {
+      console.log('使用现有用户ID:', userId);
     }
     return userId;
   }
@@ -267,9 +271,9 @@ class DataSyncService {
     
     const lastSyncTime = new Date(lastSync).getTime();
     const now = new Date().getTime();
-    const fiveMinutes = 5 * 60 * 1000; // 5分钟
+    const oneMinute = 60 * 1000; // 1分钟，更频繁地检查同步
     
-    return (now - lastSyncTime) > fiveMinutes;
+    return (now - lastSyncTime) > oneMinute;
   }
 }
 
