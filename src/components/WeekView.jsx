@@ -11,8 +11,9 @@ import DataRecovery from './DataRecovery';
 import { useScheduleData } from '../hooks/useDataSync';
 
 const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange }) => {
-  const { data, saveData, getWeekData, saveWeekData } = useScheduleData();
+  const { data, saveData, getWeekData, saveWeekData, isOnline, syncStatus, manualSync } = useScheduleData();
   const [currentWeek, setCurrentWeek] = useState(new Date());
+  const [isSyncing, setIsSyncing] = useState(false);
   const [weeklyImportantTasks, setWeeklyImportantTasks] = useState({});
   const [quickTasks, setQuickTasks] = useState({});
   const [draggedTask, setDraggedTask] = useState(null);
