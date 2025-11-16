@@ -5,7 +5,10 @@ import YearView from './components/YearView';
 import ManagementView from './components/ManagementView';
 import AddTaskModal from './components/AddTaskModal';
 import SyncStatus from './components/SyncStatus';
-import CloudSyncSetup from './services/CloudSyncSetup';
+import SyncSettings from './components/SyncSettings';
+import SyncDebugger from './components/SyncDebugger';
+import DataImportExport from './components/DataImportExport';
+import DataDebugger from './components/DataDebugger';
 import { dataAPI, dataSyncService } from './services/apiService';
 
 function App() {
@@ -13,21 +16,52 @@ function App() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [currentView, setCurrentView] = useState('week');
-  const [showSetup, setShowSetup] = useState(false);
+  const [showSyncSettings, setShowSyncSettings] = useState(false);
+  const [dataUpdateKey, setDataUpdateKey] = useState(0); // 用于触发子组件重新渲染
+  const [showDebugger, setShowDebugger] = useState(false); // 默认隐藏调试器
+  const [showImportExport, setShowImportExport] = useState(false); // 显示导入/导出
+
+  // 监听键盘快捷键切换调试器
+  useEffect(() => {
+    const handleKeyPress = (e) => {
+      // Ctrl/Cmd + Shift + D 切换调试器
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'D') {
+        e.preventDefault();
+        setShowDebugger(prev => !prev);
+      }
+      // Ctrl/Cmd + Shift + E 打开导入/导出
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'E') {
+        e.preventDefault();
+        setShowImportExport(true);
+      }
+    };
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, []);
+
+  // 监听云端数据更新事件
+  useEffect(() => {
+    const handleDataUpdate = () => {
+      console.log('App收到数据更新事件');
+      setDataUpdateKey(prev => prev + 1);
+    };
+
+    window.addEventListener('data-updated', handleDataUpdate);
+    return () => window.removeEventListener('data-updated', handleDataUpdate);
+  }, []);
 
   // 初始化数据
   useEffect(() => {
     // 检查是否已设置云同步
-    const hasGithubToken = localStorage.getItem('github_token');
     const hasApiKey = localStorage.getItem('jsonbin_api_key');
     const hasSkippedSync = localStorage.getItem('cloud_sync_enabled') === 'false';
     
-    // 如果没有任何API密钥且没有跳过设置，显示设置界面
-    if (!hasGithubToken && !hasApiKey && !hasSkippedSync) {
-      console.log('未设置API密钥，显示设置界面');
-      setShowSetup(true);
-    } else if ((hasGithubToken || hasApiKey)) {
-      console.log('已设置API密钥，获取用户信息并尝试自动同步');
+    // 如果没有API密钥且没有跳过设置，显示设置界面
+    if (!hasApiKey && !hasSkippedSync) {
+      console.log('未设置 JSONBin API密钥，显示设置界面');
+      setShowSyncSettings(true);
+    } else if (hasApiKey) {
+      console.log('已设置 JSONBin API密钥，获取用户信息并尝试自动同步');
       // 确保获取用户信息后再尝试自动同步
       dataSyncService.getUserId().then(userId => {
         console.log('获取到用户ID:', userId);
@@ -63,7 +97,7 @@ function App() {
   // 监听显示云同步设置的事件
   useEffect(() => {
     const handleShowCloudSetup = () => {
-      setShowSetup(true);
+      setShowSyncSettings(true);
     };
 
     window.addEventListener('show-cloud-setup', handleShowCloudSetup);
@@ -100,10 +134,11 @@ function App() {
   const renderCurrentView = () => {
     switch (currentView) {
       case 'test':
-        return <TestPage />;
+        return <TestPage key={dataUpdateKey} />;
       case 'week':
         return (
           <WeekView
+            key={dataUpdateKey}
             tasks={tasks}
             onAddTask={addTask}
             onUpdateTask={updateTask}
@@ -112,12 +147,13 @@ function App() {
           />
         );
       case 'year':
-        return <YearView currentView={currentView} onViewChange={setCurrentView} />;
+        return <YearView key={dataUpdateKey} currentView={currentView} onViewChange={setCurrentView} />;
       case 'management':
-        return <ManagementView currentView={currentView} onViewChange={setCurrentView} />;
+        return <ManagementView key={dataUpdateKey} currentView={currentView} onViewChange={setCurrentView} />;
       default:
         return (
           <WeekView
+            key={dataUpdateKey}
             tasks={tasks}
             onAddTask={addTask}
             onUpdateTask={updateTask}
@@ -133,8 +169,24 @@ function App() {
       <div className="min-h-screen bg-gray-50">
         <header className="bg-white shadow-sm border-b border-gray-200 px-4 py-2">
           <div className="flex items-center justify-between">
-            <h1 className="text-xl font-bold text-gray-800">生活管理系统</h1>
-            <SyncStatus />
+            <h1 className="text-xl font-bold text-gray-800"></h1>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowSyncSettings(true)}
+                className="px-3 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 text-sm flex items-center gap-1"
+                title="同步设置 (API Key + 用户ID)"
+              >
+                🔧 同步设置
+              </button>
+              <button
+                onClick={() => setShowImportExport(true)}
+                className="px-3 py-2 bg-indigo-500 text-white rounded hover:bg-indigo-600 text-sm flex items-center gap-1"
+                title="导入/导出数据 (Ctrl+Shift+E)"
+              >
+                📦 数据
+              </button>
+              {/* <SyncStatus /> */}
+            </div>
           </div>
         </header>
         
@@ -153,12 +205,17 @@ function App() {
         )}
       </div>
 
-      {showSetup && (
-        <CloudSyncSetup
-          isOpen={showSetup}
-          onClose={() => setShowSetup(false)}
-        />
+      {showSyncSettings && (
+        <SyncSettings onClose={() => setShowSyncSettings(false)} />
       )}
+
+      {showDebugger && <SyncDebugger />}
+
+      {showImportExport && (
+        <DataImportExport onClose={() => setShowImportExport(false)} />
+      )}
+
+      {/* <DataDebugger /> */}
     </>
   );
 }

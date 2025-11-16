@@ -8,6 +8,35 @@
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
     <title>人生系统</title>
+    <script>
+      // 全局错误过滤器 - 抑制浏览器扩展相关的错误
+      (function() {
+        const originalConsoleError = console.error;
+        const originalConsoleWarn = console.warn;
+        
+        const isExtensionError = (msg) => {
+          if (!msg) return false;
+          const str = msg.toString();
+          return str.includes('runtime.lastError') ||
+                 str.includes('message port closed') ||
+                 str.includes('native messaging host') ||
+                 str.includes('Extension context invalidated') ||
+                 str.includes('chrome-extension://');
+        };
+        
+        console.error = function(...args) {
+          if (!isExtensionError(args[0])) {
+            originalConsoleError.apply(console, args);
+          }
+        };
+        
+        console.warn = function(...args) {
+          if (!isExtensionError(args[0])) {
+            originalConsoleWarn.apply(console, args);
+          }
+        };
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -50,10 +50,13 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
     return weeklyImportantTasks[weekKey];
   };
   
-  // 保存总工时
+  // 保存总工时并同步
   const saveTotalWorkingHours = (hours) => {
     setTotalWorkingHours(hours);
     localStorage.setItem('totalWorkingHours', hours.toString());
+    
+    // 触发云端同步
+    saveWithSync('totalWorkingHours', hours);
   };
 
   // 处理数据导入
@@ -187,6 +190,56 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
   const closeTimeoutRef = useRef(null);
   const syncTimeoutRef = useRef(null);
 
+  // 保存数据并触发同步的辅助函数
+  const saveWithSync = (key, value) => {
+    // 直接保存到 localStorage（立即生效）
+    // 处理不同类型的值
+    if (typeof value === 'object') {
+      localStorage.setItem(key, JSON.stringify(value));
+    } else {
+      localStorage.setItem(key, value.toString());
+    }
+    
+    // 触发延迟同步（避免频繁调用）
+    if (navigator.onLine) {
+      if (syncTimeoutRef.current) {
+        clearTimeout(syncTimeoutRef.current);
+      }
+      syncTimeoutRef.current = setTimeout(() => {
+        console.log('🔄 延迟同步触发，收集最新数据并上传...');
+        
+        // 从 localStorage 获取最新数据（确保数据是最新的）
+        const weeklyImportantTasksData = JSON.parse(localStorage.getItem('weeklyImportantTasks') || '{}');
+        const quickTasksData = JSON.parse(localStorage.getItem('quickTasks') || '{}');
+        const taskTimeRecordsData = JSON.parse(localStorage.getItem('taskTimeRecords') || '{}');
+        const totalWorkingHoursData = parseFloat(localStorage.getItem('totalWorkingHours') || '40');
+        const yearGoalsData = JSON.parse(localStorage.getItem('yearGoals') || '[]');
+        
+        const currentData = {
+          weeklyImportantTasks: weeklyImportantTasksData,
+          quickTasks: quickTasksData,
+          taskTimeRecords: taskTimeRecordsData,
+          weeks: data?.weeks || {},
+          importantTasks: data?.importantTasks || [],
+          totalWorkingHours: totalWorkingHoursData,
+          yearGoals: yearGoalsData
+        };
+        
+        console.log('📦 收集到的完整数据:', currentData);
+        console.log('📊 数据统计:', {
+          weeklyImportantTasks: Object.keys(weeklyImportantTasksData).length + ' 周',
+          quickTasks: Object.keys(quickTasksData).length + ' 天',
+          taskTimeRecords: Object.keys(taskTimeRecordsData).length + ' 条',
+          totalWorkingHours: totalWorkingHoursData + ' 小时',
+          yearGoals: Object.keys(yearGoalsData).length + ' 个目标'
+        });
+        
+        // 直接调用 saveData，它会上传完整数据
+        saveData(currentData, false); // false 表示不跳过同步
+      }, 2000); // 2秒后同步（用户停止编辑后）
+    }
+  };
+
   const updateImportantTask = (index, text) => {
     const weekKey = getCurrentWeekKey();
     const currentTasks = getCurrentWeekImportantTasks();
@@ -194,17 +247,19 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
       i === index ? { ...task, text } : task
     );
     
-    // 更新weeklyImportantTasks
-    setWeeklyImportantTasks(prev => ({
-      ...prev,
-      [weekKey]: newImportantTasks
-    }));
-    
-    // 保存到本地存储
-    localStorage.setItem('weeklyImportantTasks', JSON.stringify({
+    // 创建更新后的完整对象
+    const updatedWeeklyTasks = {
       ...weeklyImportantTasks,
       [weekKey]: newImportantTasks
-    }));
+    };
+    
+    // 更新组件状态
+    setWeeklyImportantTasks(updatedWeeklyTasks);
+    
+    // 保存到本地存储并触发同步
+    saveWithSync('weeklyImportantTasks', updatedWeeklyTasks);
+    
+    console.log('💾 保存重要任务:', weekKey, newImportantTasks);
   };
 
   const updateQuickTask = (dayKey, slotId, taskIndex, field, value) => {
@@ -235,11 +290,13 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
       }];
     }
     
+    // 更新组件状态
     setQuickTasks(newQuickTasks);
     
-    // 保存到本地存储
-    localStorage.setItem('quickTasks', JSON.stringify(newQuickTasks));
-    localStorage.setItem('weeklyImportantTasks', JSON.stringify(weeklyImportantTasks));
+    // 保存到本地存储并触发同步
+    saveWithSync('quickTasks', newQuickTasks);
+    
+    console.log('💾 保存快速任务:', dayKey, slotId);
   };
 
   const deleteQuickTask = (dayKey, slotId, taskIndex) => {
@@ -267,9 +324,8 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
     
     setQuickTasks(newQuickTasks);
     
-    // 保存到本地存储
-    localStorage.setItem('quickTasks', JSON.stringify(newQuickTasks));
-    localStorage.setItem('weeklyImportantTasks', JSON.stringify(weeklyImportantTasks));
+    // 保存到本地存储并触发同步
+    saveWithSync('quickTasks', newQuickTasks);
   };
 
   const toggleTaskComplete = (dayKey, slotId, taskIndex, event) => {
@@ -289,8 +345,8 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
     
     setQuickTasks(newQuickTasks);
     
-    // 保存到本地存储
-    localStorage.setItem('quickTasks', JSON.stringify(newQuickTasks));
+    // 保存到本地存储并触发同步
+    saveWithSync('quickTasks', newQuickTasks);
 
     // 如果任务从未完成变为完成，显示时间记录弹窗
     if (!wasCompleted && event) {
@@ -402,8 +458,8 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
     
     setQuickTasks(newQuickTasks);
     
-    // 保存到本地存储
-    localStorage.setItem('quickTasks', JSON.stringify(newQuickTasks));
+    // 保存到本地存储并触发同步
+    saveWithSync('quickTasks', newQuickTasks);
     
     setDraggedTask(null);
   };
@@ -425,8 +481,8 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
     
     setQuickTasks(newQuickTasks);
     
-    // 保存到本地存储
-    localStorage.setItem('quickTasks', JSON.stringify(newQuickTasks));
+    // 保存到本地存储并触发同步
+    saveWithSync('quickTasks', newQuickTasks);
   };
 
   const getTasksForDayAndSlot = (day, slotId) => {
@@ -459,8 +515,8 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
     setTaskTimeRecords(newTaskTimeRecords);
     setTimeTrackingPopup(null);
     
-    // 保存时间记录到本地存储
-    localStorage.setItem('taskTimeRecords', JSON.stringify(newTaskTimeRecords));
+    // 保存时间记录到本地存储并触发同步
+    saveWithSync('taskTimeRecords', newTaskTimeRecords);
   };
 
   // 清空任务时间记录
@@ -472,8 +528,8 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
     setTaskTimeRecords(newTaskTimeRecords);
     setTimeTrackingPopup(null);
     
-    // 保存时间记录到本地存储
-    localStorage.setItem('taskTimeRecords', JSON.stringify(newTaskTimeRecords));
+    // 保存时间记录到本地存储并触发同步
+    saveWithSync('taskTimeRecords', newTaskTimeRecords);
   };
 
   // 复制任务
@@ -495,8 +551,8 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
     
     setQuickTasks(newQuickTasks);
     
-    // 保存到本地存储
-    localStorage.setItem('quickTasks', JSON.stringify(newQuickTasks));
+    // 保存到本地存储并触发同步
+    saveWithSync('quickTasks', newQuickTasks);
     
     setTaskActionPopup(null);
   };

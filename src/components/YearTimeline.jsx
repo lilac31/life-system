@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { format, startOfYear, addMonths, differenceInDays, differenceInWeeks, parseISO, isValid } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 import { Plus, X, Calendar, Clock, Edit2, Check } from 'lucide-react';
+import { useScheduleData } from '../hooks/useDataSync';
 
 const YearTimeline = () => {
+  const { saveData, data, isOnline } = useScheduleData();
   const [yearGoals, setYearGoals] = useState([]);
   const [showAddGoal, setShowAddGoal] = useState(false);
   const [newGoal, setNewGoal] = useState({ title: '', date: '', color: 'red' });
@@ -12,6 +14,7 @@ const YearTimeline = () => {
   const [showPastWarning, setShowPastWarning] = useState(false);
   const [editingGoal, setEditingGoal] = useState(null);
   const [editGoal, setEditGoal] = useState({ title: '', date: '', color: 'red' });
+  const syncTimeoutRef = useRef(null);
   
   const currentYear = new Date().getFullYear();
   const yearStart = new Date(2025, 9, 1); // 2025年10月1日
@@ -44,17 +47,57 @@ const YearTimeline = () => {
     const savedGoals = localStorage.getItem('yearGoals');
     if (savedGoals) {
       try {
-        setYearGoals(JSON.parse(savedGoals));
+        const parsed = JSON.parse(savedGoals);
+        // 确保数据是数组格式，如果是对象则转换为空数组
+        if (Array.isArray(parsed)) {
+          setYearGoals(parsed);
+        } else {
+          console.warn('yearGoals 格式错误，已重置为空数组');
+          setYearGoals([]);
+          localStorage.setItem('yearGoals', JSON.stringify([]));
+        }
       } catch (e) {
         console.error('Failed to parse yearGoals:', e);
+        setYearGoals([]);
       }
     }
   }, []);
 
-  // 保存年度目标到本地存储
+  // 保存年度目标到本地存储并同步
   const saveGoals = (goals) => {
-    setYearGoals(goals);
-    localStorage.setItem('yearGoals', JSON.stringify(goals));
+    // 确保传入的是数组
+    const goalsArray = Array.isArray(goals) ? goals : [];
+    setYearGoals(goalsArray);
+    localStorage.setItem('yearGoals', JSON.stringify(goalsArray));
+    
+    // 触发云端同步
+    if (isOnline) {
+      if (syncTimeoutRef.current) {
+        clearTimeout(syncTimeoutRef.current);
+      }
+      syncTimeoutRef.current = setTimeout(() => {
+        console.log('🔄 yearGoals 变更，触发云端同步...');
+        
+        // 从 localStorage 获取所有最新数据
+        const weeklyImportantTasksData = JSON.parse(localStorage.getItem('weeklyImportantTasks') || '{}');
+        const quickTasksData = JSON.parse(localStorage.getItem('quickTasks') || '{}');
+        const taskTimeRecordsData = JSON.parse(localStorage.getItem('taskTimeRecords') || '{}');
+        const totalWorkingHoursData = parseFloat(localStorage.getItem('totalWorkingHours') || '40');
+        const yearGoalsData = JSON.parse(localStorage.getItem('yearGoals') || '[]');
+        
+        const currentData = {
+          weeklyImportantTasks: weeklyImportantTasksData,
+          quickTasks: quickTasksData,
+          taskTimeRecords: taskTimeRecordsData,
+          weeks: data?.weeks || {},
+          importantTasks: data?.importantTasks || [],
+          totalWorkingHours: totalWorkingHoursData,
+          yearGoals: yearGoalsData
+        };
+        
+        saveData(currentData, false);
+      }, 2000);
+    }
   };
 
   // 添加新目标

@@ -8,12 +8,12 @@ const SyncStatus = ({ className = "" }) => {
   
   // 获取当前用户信息
   const getCurrentUser = () => {
-    const username = localStorage.getItem('github_username');
     const userId = localStorage.getItem('user_id');
-    return { username, userId };
+    const binId = localStorage.getItem('jsonbin_id');
+    return { userId, binId };
   };
   
-  const { username, userId } = getCurrentUser();
+  const { userId, binId } = getCurrentUser();
 
   const getStatusIcon = () => {
     switch (syncStatus) {
@@ -38,7 +38,7 @@ const SyncStatus = ({ className = "" }) => {
       case 'error':
         return '同步失败';
       default:
-        return '等待同步';
+        return ''; // 隐藏"等待同步"状态
     }
   };
 
@@ -87,14 +87,10 @@ const SyncStatus = ({ className = "" }) => {
   const handleClearToken = () => {
     if (confirm('确定要清除所有同步配置吗？这将删除云端同步令牌和相关数据，需要重新设置。')) {
       // 清除所有相关的 localStorage 数据
-      localStorage.removeItem('github_token');
       localStorage.removeItem('jsonbin_api_key');
-      localStorage.removeItem('gist_id');
-      localStorage.removeItem('bin_id');
+      localStorage.removeItem('jsonbin_id');
       localStorage.removeItem('sync_provider');
       localStorage.removeItem('cloud_sync_enabled');
-      localStorage.removeItem('github_username');
-      localStorage.removeItem('github_user_id');
       localStorage.removeItem('user_id');
       localStorage.setItem('sync_status', 'pending');
       
@@ -122,11 +118,13 @@ const SyncStatus = ({ className = "" }) => {
       {isExpanded && (
         <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 p-4 z-10">
           <div className="space-y-3">
-            {username && (
+            {binId && (
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">GitHub用户:</span>
-                <div className="flex items-center gap-1 text-blue-600 dark:text-blue-400">
-                  <span className="text-sm">{username}</span>
+                <span className="text-sm font-medium">Bin ID:</span>
+                <div className="flex items-center gap-1 text-purple-600 dark:text-purple-400">
+                  <span className="text-xs truncate max-w-[120px]" title={binId}>
+                    {binId.substring(0, 12)}...
+                  </span>
                 </div>
               </div>
             )}
@@ -156,7 +154,7 @@ const SyncStatus = ({ className = "" }) => {
               <button
                 onClick={handleManualSync}
                 disabled={syncStatus === 'syncing'}
-                className="w-full py-2 px-4 bg-blue-500 text-white rounded-lg font-medium text-sm hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full py-2 px-4 bg-purple-500 text-white rounded-lg font-medium text-sm hover:bg-purple-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {syncStatus === 'syncing' ? '同步中...' : '立即同步'}
               </button>
@@ -181,7 +179,7 @@ const SyncStatus = ({ className = "" }) => {
             
             <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
               <p className="text-xs text-gray-500">
-                数据会自动同步到云端，确保在不同设备上访问时保持一致。如遇到问题，可清除后重新设置。
+                数据会自动同步到 JSONBin.io 云端，确保在不同设备上访问时保持一致。如遇到问题，可清除后重新设置。
               </p>
             </div>
           </div>

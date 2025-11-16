@@ -4,7 +4,7 @@ import { dataAPI, useDataSync } from '../services/apiService';
 export const useScheduleData = () => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const { isOnline, syncStatus, manualSync, lastSync } = useDataSync();
+  const { isOnline, syncStatus, manualSync, lastSync, dataVersion } = useDataSync();
 
   // 加载数据
   const loadData = useCallback(() => {
@@ -17,6 +17,25 @@ export const useScheduleData = () => {
       setLoading(false);
     }
   }, []);
+
+  // 监听云端数据更新事件
+  useEffect(() => {
+    const handleDataUpdate = (event) => {
+      console.log('收到数据更新事件，重新加载数据');
+      loadData();
+    };
+
+    window.addEventListener('data-updated', handleDataUpdate);
+    return () => window.removeEventListener('data-updated', handleDataUpdate);
+  }, [loadData]);
+
+  // 当dataVersion变化时，重新加载数据
+  useEffect(() => {
+    if (dataVersion > 0) {
+      console.log('数据版本变化，重新加载数据');
+      loadData();
+    }
+  }, [dataVersion, loadData]);
 
   // 保存数据并尝试同步到云端
   const saveData = useCallback((newData, skipSync = false) => {
@@ -93,16 +112,32 @@ export const useScheduleData = () => {
 
   // 监听网络状态变化，重新同步
   useEffect(() => {
+    let wasOffline = false;
+    
+    const handleOfflineEvent = () => {
+      wasOffline = true;
+    };
+    
     const handleOnline = () => {
-      if (isOnline && syncStatus !== 'success') {
+      // 只有在确实从离线恢复时才同步，避免页面刷新时触发
+      if (wasOffline && isOnline && syncStatus !== 'success') {
+        console.log('📡 网络恢复，开始同步数据');
         manualSync().then(() => {
           loadData(); // 同步完成后重新加载数据
+        }).catch(err => {
+          console.warn('网络恢复同步失败:', err);
         });
+        wasOffline = false;
       }
     };
 
+    window.addEventListener('offline', handleOfflineEvent);
     window.addEventListener('online', handleOnline);
-    return () => window.removeEventListener('online', handleOnline);
+    
+    return () => {
+      window.removeEventListener('offline', handleOfflineEvent);
+      window.removeEventListener('online', handleOnline);
+    };
   }, [isOnline, syncStatus, manualSync, loadData]);
 
   return {

@@ -3,8 +3,37 @@ import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
 import './index.css'
 
+// 抑制 Chrome 扩展相关的错误
+const originalConsoleError = console.error;
+console.error = (...args) => {
+  const errorMessage = args[0]?.toString() || '';
+  
+  // 过滤掉浏览器扩展相关的错误
+  if (
+    errorMessage.includes('runtime.lastError') ||
+    errorMessage.includes('message port closed') ||
+    errorMessage.includes('native messaging host') ||
+    errorMessage.includes('Extension context invalidated')
+  ) {
+    return; // 忽略这些错误
+  }
+  
+  // 其他错误正常输出
+  originalConsoleError.apply(console, args);
+};
+
 // 错误处理
 window.addEventListener('error', function(e) {
+  // 忽略扩展相关的错误
+  const errorMessage = e.error?.toString() || e.message || '';
+  if (
+    errorMessage.includes('runtime.lastError') ||
+    errorMessage.includes('message port closed') ||
+    errorMessage.includes('native messaging host')
+  ) {
+    return;
+  }
+  
   console.error('Global error:', e.error);
   // 显示用户友好的错误信息
   const errorElement = document.createElement('div');
@@ -48,6 +77,17 @@ window.addEventListener('error', function(e) {
 });
 
 window.addEventListener('unhandledrejection', function(e) {
+  // 忽略扩展相关的错误
+  const errorMessage = e.reason?.toString() || '';
+  if (
+    errorMessage.includes('runtime.lastError') ||
+    errorMessage.includes('message port closed') ||
+    errorMessage.includes('native messaging host')
+  ) {
+    e.preventDefault(); // 阻止默认的错误处理
+    return;
+  }
+  
   console.error('Unhandled promise rejection:', e.reason);
 });
 
