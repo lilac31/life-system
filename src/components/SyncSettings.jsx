@@ -262,11 +262,24 @@ export default function SyncSettings({ onClose }) {
                             alert('❌ Bin ID 格式错误\n\n正确格式：24位字母和数字组合');
                             return;
                           }
+                          
+                          // 保存 Bin ID
                           localStorage.setItem('jsonbin_id', manualBinId);
                           setBinId(manualBinId);
                           setShowManualInput(false);
                           setManualBinId('');
-                          alert('✅ Bin ID 已保存！\n\n刷新页面后将同步该 Bin 的数据。');
+                          
+                          // 立即重新初始化同步服务
+                          try {
+                            console.log('🔄 重新初始化同步服务，使用新的 Bin ID:', manualBinId);
+                            await dataSyncService.reinitialize();
+                            alert('✅ Bin ID 已保存并同步成功！\n\n数据已从云端下载。');
+                          } catch (error) {
+                            console.warn('⚠️ 同步失败，但 Bin ID 已保存:', error);
+                            alert('✅ Bin ID 已保存！\n\n刷新页面后将同步该 Bin 的数据。');
+                          }
+                          
+                          // 刷新页面确保完全同步
                           setTimeout(() => window.location.reload(), 1000);
                         }}
                         className="flex-1 px-3 py-2 bg-blue-500 text-white rounded text-sm font-medium hover:bg-blue-600"
