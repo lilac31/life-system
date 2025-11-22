@@ -986,6 +986,7 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
                               color={quickTask.color}
                               completed={quickTask.completed}
                               estimatedTime={quickTask.estimatedTime}
+                              slotId={slot.id}
                               onChange={(time) => updateQuickTask(dayKey, slot.id, index, 'time', time)}
                               onColorChange={(color) => updateQuickTask(dayKey, slot.id, index, 'color', color)}
                               onEstimatedTimeChange={(hours) => updateQuickTask(dayKey, slot.id, index, 'estimatedTime', hours)}
@@ -1314,8 +1315,10 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
                       onMouseEnter={() => setHighlightedColor(color)}
                       onMouseLeave={() => setHighlightedColor(null)}
                     >
-                      <span className="relative z-10">
-                        {percentage >= 5 ? `${plannedHours.toFixed(1)}h` : ''}
+                      <span className="relative z-10 whitespace-nowrap px-1 text-[10px]">
+                        {percentage >= 10 ? `${colorNames[color]} ${percentage.toFixed(0)}% ${plannedHours.toFixed(1)}h` : 
+                         percentage >= 6 ? `${percentage.toFixed(0)}% ${plannedHours.toFixed(1)}h` : 
+                         percentage >= 3 ? `${percentage.toFixed(0)}%` : ''}
                       </span>
                     </div>
                   );
@@ -1323,11 +1326,11 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
                 {/* 剩余计划时间 */}
                 {totalPlannedHours < totalWorkingHours && (
                   <div
-                    className="bg-gray-200 flex items-center justify-center text-gray-500 text-xs"
+                    className="bg-gray-200 flex items-center justify-center text-gray-500 text-[10px]"
                     style={{ width: `${((totalWorkingHours - totalPlannedHours) / totalWorkingHours) * 100}%` }}
                     title={`剩余计划: ${(totalWorkingHours - totalPlannedHours).toFixed(1)}小时`}
                   >
-                    {((totalWorkingHours - totalPlannedHours) / totalWorkingHours) >= 0.05 ? `${(totalWorkingHours - totalPlannedHours).toFixed(1)}h` : ''}
+                    {((totalWorkingHours - totalPlannedHours) / totalWorkingHours) >= 0.05 ? `${((totalWorkingHours - totalPlannedHours) / totalWorkingHours * 100).toFixed(0)}%` : ''}
                   </div>
                 )}
               </div>
@@ -1353,8 +1356,10 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
                       onMouseEnter={() => setHighlightedColor(color)}
                       onMouseLeave={() => setHighlightedColor(null)}
                     >
-                      <span className="relative z-10">
-                        {percentage >= 5 ? `${actualHours.toFixed(1)}h` : ''}
+                      <span className="relative z-10 whitespace-nowrap px-1 text-[10px]">
+                        {percentage >= 10 ? `${colorNames[color]} ${percentage.toFixed(0)}% ${actualHours.toFixed(1)}h` : 
+                         percentage >= 6 ? `${percentage.toFixed(0)}% ${actualHours.toFixed(1)}h` : 
+                         percentage >= 3 ? `${percentage.toFixed(0)}%` : ''}
                       </span>
                     </div>
                   );
@@ -1362,25 +1367,24 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
                 {/* 剩余实际时间 */}
                 {totalActualHours < totalWorkingHours && (
                   <div
-                    className="bg-gray-200 flex items-center justify-center text-gray-500 text-xs"
+                    className="bg-gray-200 flex items-center justify-center text-gray-500 text-[10px]"
                     style={{ width: `${((totalWorkingHours - totalActualHours) / totalWorkingHours) * 100}%` }}
                     title={`剩余: ${(totalWorkingHours - totalActualHours).toFixed(1)}小时`}
                   >
-                    {((totalWorkingHours - totalActualHours) / totalWorkingHours) >= 0.05 ? `${(totalWorkingHours - totalActualHours).toFixed(1)}h` : ''}
+                    {((totalWorkingHours - totalActualHours) / totalWorkingHours) >= 0.05 ? `${((totalWorkingHours - totalActualHours) / totalWorkingHours * 100).toFixed(0)}%` : ''}
                   </div>
                 )}
               </div>
             </div>
             
-            {/* 颜色图例 - 显示计划和实际时间 */}
+            {/* 颜色图例 - 显示计划和实际时间（百分比+小时） */}
             <div className="flex flex-wrap gap-3 mt-3 text-xs">
               {Array.from(allColors).map(color => {
                 const plannedHours = plannedColorStats[color] || 0;
                 const actualHours = actualColorStats[color] || 0;
-                const gap = plannedHours - actualHours;
-                const percentage = (plannedHours / totalWorkingHours) * 100;
+                const plannedPercentage = (plannedHours / totalWorkingHours) * 100;
+                const actualPercentage = (actualHours / totalWorkingHours) * 100;
                 const colorClasses = getColorClasses(color);
-                const colorTextClasses = color ? colorClasses.text.replace('bg-', 'text-') : 'text-gray-400';
                 
                 return (
                   <div key={color} className="flex items-center space-x-1">
@@ -1389,13 +1393,15 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
                       <div className={`w-3 h-3 ${colorClasses.bg} opacity-40 rounded ml-0.5`}></div>
                     </div>
                     <span className="text-gray-700">
-                      {colorNames[color]}: 
-                      <span className="text-gray-600"> 计划{plannedHours.toFixed(1)}h</span>
-                      {actualHours > 0 && <span className="font-medium text-gray-900"> → 完成{actualHours.toFixed(1)}h</span>}
-                      {gap !== 0 && (
-                        <span className={gap > 0 ? 'text-orange-500' : 'text-emerald-600'}>
-                          {' '}({gap > 0 ? '+' : ''}{gap.toFixed(1)}h)
-                        </span>
+                      <span className={colorClasses.text}>{colorNames[color]}</span>: 
+                      <span className={`${colorClasses.text} font-medium`}> 计划{plannedPercentage.toFixed(1)}%</span>
+                      <span className="text-gray-500"> ({plannedHours.toFixed(1)}h)</span>
+                      {actualHours > 0 && (
+                        <>
+                          <span className="text-gray-500"> → </span>
+                          <span className={`${colorClasses.text} font-bold`}>完成{actualPercentage.toFixed(1)}%</span>
+                          <span className="text-gray-500"> ({actualHours.toFixed(1)}h)</span>
+                        </>
                       )}
                     </span>
                   </div>

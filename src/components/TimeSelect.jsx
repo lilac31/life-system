@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 
-const TimeSelect = ({ value, color, completed = false, estimatedTime, onChange, onColorChange, onEstimatedTimeChange, className = "" }) => {
+const TimeSelect = ({ value, color, completed = false, estimatedTime, onChange, onColorChange, onEstimatedTimeChange, className = "", slotId = "" }) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
   const buttonRef = useRef(null);
@@ -56,24 +56,36 @@ const TimeSelect = ({ value, color, completed = false, estimatedTime, onChange, 
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // 当下拉菜单打开时，设置默认滚动位置到10:00
+  // 当下拉菜单打开时，根据时间段设置默认滚动位置
   useEffect(() => {
     if (isOpen && dropdownRef.current) {
       // 延迟确保DOM完全渲染
       const timer = setTimeout(() => {
         if (dropdownRef.current) {
-          const tenAmButton = dropdownRef.current.querySelector('button[data-time="10:00"]');
-          if (tenAmButton) {
-            tenAmButton.scrollIntoView({ 
+          // 根据时间段确定默认时间
+          let defaultTime = '10:00'; // 默认值
+          if (slotId === 'morning') {
+            defaultTime = '09:00';
+          } else if (slotId === 'noon') {
+            defaultTime = '12:00';
+          } else if (slotId === 'afternoon') {
+            defaultTime = '14:00';
+          } else if (slotId === 'evening') {
+            defaultTime = '18:00';
+          }
+          
+          const targetButton = dropdownRef.current.querySelector(`button[data-time="${defaultTime}"]`);
+          if (targetButton) {
+            targetButton.scrollIntoView({ 
               behavior: 'instant', 
               block: 'center' 
             });
           } else {
             // 备用方案：直接计算位置
-            const tenAmIndex = timeOptions.findIndex(time => time === '10:00');
-            if (tenAmIndex !== -1) {
+            const targetIndex = timeOptions.findIndex(time => time === defaultTime);
+            if (targetIndex !== -1) {
               const itemHeight = 28;
-              dropdownRef.current.scrollTop = tenAmIndex * itemHeight - 80;
+              dropdownRef.current.scrollTop = targetIndex * itemHeight - 80;
             }
           }
         }
@@ -81,7 +93,7 @@ const TimeSelect = ({ value, color, completed = false, estimatedTime, onChange, 
       
       return () => clearTimeout(timer);
     }
-  }, [isOpen, timeOptions]);
+  }, [isOpen, timeOptions, slotId]);
 
   const handleTimeSelect = (time) => {
     onChange(time);
@@ -96,6 +108,7 @@ const TimeSelect = ({ value, color, completed = false, estimatedTime, onChange, 
   };
 
   const handleColorSelect = (colorValue) => {
+    // 允许修改已完成任务的颜色
     onColorChange(colorValue);
     // 选择颜色不关闭面板，让用户可以继续选择时间
   };
@@ -125,17 +138,17 @@ const TimeSelect = ({ value, color, completed = false, estimatedTime, onChange, 
           value ? 
             (color ? 
               (completed ? 
-                `${currentColor.text} font-medium opacity-70 line-through` : 
-                `${currentColor.text} font-medium`
+                `${currentColor.text} font-medium opacity-70 line-through cursor-pointer` : 
+                `${currentColor.text} font-medium cursor-pointer`
               ) :
               (completed ? 
-                'text-gray-600 font-bold opacity-70 line-through' : 
-                'text-gray-900 font-bold'
+                'text-gray-600 font-bold opacity-70 line-through cursor-pointer' : 
+                'text-gray-900 font-bold cursor-pointer'
               )
             ) : 
-            (completed ? 'text-gray-500' : 'text-gray-400')
+            (completed ? 'text-gray-500 cursor-pointer' : 'text-gray-400 cursor-pointer')
         }`}
-        title={value ? `${value}` : '点击选择时间'}
+        title={value ? (completed ? '点击修改时间或颜色' : '点击选择时间') : '点击选择时间'}
       >
         {value || ''}
       </button>
