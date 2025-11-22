@@ -184,7 +184,9 @@ export default function SyncSettings({ onClose }) {
                   <span className="text-gray-600">用户ID:</span>
                   <span className="font-mono text-green-700 text-xs">{autoUserId}</span>
                 </div>
-                {binId && (
+                
+                {/* Bin ID 显示或输入区域 */}
+                {!showManualInput && binId && (
                   <>
                     <div className="flex items-center justify-between text-sm gap-2">
                       <span className="text-gray-600 flex-shrink-0">Bin ID:</span>
@@ -218,61 +220,69 @@ export default function SyncSettings({ onClose }) {
                           </ol>
                         </div>
                       </details>
+                      <button
+                        onClick={() => setShowManualInput(true)}
+                        className="mt-2 text-xs text-blue-600 hover:text-blue-700 underline"
+                      >
+                        更换 Bin ID
+                      </button>
                     </div>
                   </>
                 )}
-                {!binId && (
+                
+                {!showManualInput && !binId && (
                   <div className="pt-2 border-t border-green-200">
                     <p className="text-xs text-amber-700 mb-2">
                       ⏳ 等待首次保存创建云端存储...
                     </p>
-                    {!showManualInput && (
+                    <button
+                      onClick={() => setShowManualInput(true)}
+                      className="px-4 py-2 bg-blue-500 text-white rounded text-sm font-medium hover:bg-blue-600"
+                    >
+                      使用已有数据
+                    </button>
+                  </div>
+                )}
+                
+                {showManualInput && (
+                  <div className="pt-2 border-t border-green-200 space-y-2">
+                    <p className="text-sm font-medium text-gray-700">输入已有的 Bin ID</p>
+                    <p className="text-xs text-gray-600">从其他设备复制 Bin ID 并粘贴到下方：</p>
+                    <input
+                      type="text"
+                      value={manualBinId}
+                      onChange={(e) => setManualBinId(e.target.value.trim())}
+                      placeholder="粘贴 Bin ID（24位字母数字）"
+                      className="w-full px-3 py-2 border border-gray-300 rounded text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                    <div className="flex gap-2">
                       <button
-                        onClick={() => setShowManualInput(true)}
-                        className="text-xs text-blue-600 hover:text-blue-700 underline"
+                        onClick={async () => {
+                          if (!/^[a-f0-9]{24}$/i.test(manualBinId)) {
+                            alert('❌ Bin ID 格式错误\n\n正确格式：24位字母和数字组合');
+                            return;
+                          }
+                          localStorage.setItem('jsonbin_id', manualBinId);
+                          setBinId(manualBinId);
+                          setShowManualInput(false);
+                          setManualBinId('');
+                          alert('✅ Bin ID 已保存！\n\n刷新页面后将同步该 Bin 的数据。');
+                          setTimeout(() => window.location.reload(), 1000);
+                        }}
+                        className="flex-1 px-3 py-2 bg-blue-500 text-white rounded text-sm font-medium hover:bg-blue-600"
                       >
-                        或者，使用其他设备的 Bin ID 同步数据 →
+                        保存 Bin ID
                       </button>
-                    )}
-                    {showManualInput && (
-                      <div className="mt-3 space-y-2">
-                        <p className="text-xs text-gray-600">从其他设备复制 Bin ID 并粘贴到下方：</p>
-                        <input
-                          type="text"
-                          value={manualBinId}
-                          onChange={(e) => setManualBinId(e.target.value.trim())}
-                          placeholder="粘贴 Bin ID（24位字母数字）"
-                          className="w-full px-3 py-2 border border-gray-300 rounded text-xs font-mono focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                        />
-                        <div className="flex gap-2">
-                          <button
-                            onClick={async () => {
-                              if (!/^[a-f0-9]{24}$/i.test(manualBinId)) {
-                                alert('❌ Bin ID 格式错误\n\n正确格式：24位字母和数字组合');
-                                return;
-                              }
-                              localStorage.setItem('jsonbin_id', manualBinId);
-                              setBinId(manualBinId);
-                              setShowManualInput(false);
-                              alert('✅ Bin ID 已保存！\n\n刷新页面后将同步该 Bin 的数据。');
-                              setTimeout(() => window.location.reload(), 1000);
-                            }}
-                            className="flex-1 px-3 py-2 bg-blue-500 text-white rounded text-xs font-medium hover:bg-blue-600"
-                          >
-                            保存 Bin ID
-                          </button>
-                          <button
-                            onClick={() => {
-                              setShowManualInput(false);
-                              setManualBinId('');
-                            }}
-                            className="px-3 py-2 border border-gray-300 rounded text-xs hover:bg-gray-50"
-                          >
-                            取消
-                          </button>
-                        </div>
-                      </div>
-                    )}
+                      <button
+                        onClick={() => {
+                          setShowManualInput(false);
+                          setManualBinId('');
+                        }}
+                        className="px-3 py-2 border border-gray-300 rounded text-sm hover:bg-gray-50"
+                      >
+                        取消
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
