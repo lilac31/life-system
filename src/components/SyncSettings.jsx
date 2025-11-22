@@ -323,18 +323,17 @@ export default function SyncSettings({ onClose }) {
                 <div className="flex items-start gap-2">
                   <AlertCircle size={18} className="text-amber-600 mt-0.5 flex-shrink-0" />
                   <div className="text-sm text-amber-800">
-                    <p className="font-medium mb-2">🔄 如何在多设备间同步数据？</p>
-                    <p className="mb-2"><strong>主设备（第一台）：</strong></p>
+                    <p className="font-medium mb-2">🔄 多设备同步说明</p>
+                    <p className="mb-2"><strong>✨ 自动同步（推荐）：</strong></p>
                     <ol className="list-decimal list-inside space-y-1 mb-3">
-                      <li>配置 API Key 后会自动创建 Bin</li>
-                      <li>复制下方显示的 Bin ID</li>
-                      <li>发送到其他设备</li>
+                      <li>在所有设备上配置<strong>相同的 API Key</strong></li>
+                      <li>系统会自动查找并同步到同一个云端存储</li>
+                      <li>无需手动配置 Bin ID！</li>
                     </ol>
-                    <p className="mb-2"><strong>其他设备：</strong></p>
+                    <p className="mb-2"><strong>🔧 手动配置（可选）：</strong></p>
                     <ol className="list-decimal list-inside space-y-1">
-                      <li>配置相同的 API Key</li>
-                      <li>在下方输入主设备的 Bin ID</li>
-                      <li>点击"同步此 Bin"即可</li>
+                      <li>如果自动查找失败，可以手动输入 Bin ID</li>
+                      <li>从主设备复制 Bin ID 到其他设备</li>
                     </ol>
                   </div>
                 </div>
@@ -375,7 +374,7 @@ export default function SyncSettings({ onClose }) {
               ) : (
                 <div className="space-y-2">
                   <label className="block text-sm font-medium text-gray-700">
-                    输入其他设备的 Bin ID（可选）
+                    手动输入 Bin ID（可选 - 仅在自动查找失败时使用）
                   </label>
                   <div className="flex items-center gap-2">
                     <input
@@ -393,7 +392,7 @@ export default function SyncSettings({ onClose }) {
                     </button>
                   </div>
                   <p className="text-xs text-gray-500">
-                    💡 如果是第一台设备，留空即可（系统会自动创建新 Bin）
+                    💡 <strong>提示：</strong>系统会自动查找云端存储，通常无需手动输入
                   </p>
                 </div>
               )}

@@ -227,6 +227,21 @@ class DataSyncService {
       if (savedBinId) {
         this.binId = savedBinId;
         console.log('📦 使用已保存的 Bin ID:', this.binId);
+      } else {
+        // 如果本地没有 Bin ID，尝试从云端查找
+        console.log('🔍 本地无 Bin ID，尝试从云端查找...');
+        try {
+          const foundBinId = await this.findUserBin();
+          if (foundBinId) {
+            this.binId = foundBinId;
+            localStorage.setItem('jsonbin_id', foundBinId);
+            console.log('✅ 从云端找到 Bin ID:', foundBinId);
+          } else {
+            console.log('📭 云端未找到该用户的 Bin，将在首次保存时创建');
+          }
+        } catch (error) {
+          console.warn('⚠️ 查找云端 Bin 失败:', error.message);
+        }
       }
       
       return generatedUserId;
@@ -338,6 +353,66 @@ class DataSyncService {
     console.log('✅ Bin ID 已清除，下次保存时将创建新 Bin');
   }
 
+  // 查找该用户的 Bin（通过名称或遍历所有 Bin）
+  async findUserBin() {
+    try {
+      const apiKey = this.getApiKey();
+      
+      console.log('🔍 查找用户的云端 Bin...');
+      
+      // 获取所有 Bin 列表
+      const response = await fetch('https://api.jsonbin.io/v3/b', {
+        headers: {
+          'X-Master-Key': apiKey
+        }
+      });
+      
+      if (!response.ok) {
+        console.warn('⚠️ 获取 Bin 列表失败:', response.status);
+        return null;
+      }
+      
+      const bins = await response.json();
+      console.log('📋 找到', bins.length || 0, '个 Bin');
+      
+      // 查找名称匹配的 Bin
+      const targetBinName = `life-system-${this.userId}`;
+      const matchedBin = bins.find(bin => bin.record === targetBinName);
+      
+      if (matchedBin) {
+        console.log('✅ 找到匹配的 Bin:', matchedBin.id);
+        return matchedBin.id;
+      }
+      
+      // 如果没找到，遍历所有 Bin 检查 _metadata.userId
+      console.log('🔍 通过元数据查找用户 Bin...');
+      for (const bin of bins) {
+        try {
+          const binResponse = await fetch(`https://api.jsonbin.io/v3/b/${bin.id}/latest`, {
+            headers: { 'X-Master-Key': apiKey }
+          });
+          
+          if (binResponse.ok) {
+            const binData = await binResponse.json();
+            if (binData.record?._metadata?.userId === this.userId) {
+              console.log('✅ 找到匹配用户ID的 Bin:', bin.id);
+              return bin.id;
+            }
+          }
+        } catch (err) {
+          // 忽略单个 Bin 的错误
+          continue;
+        }
+      }
+      
+      console.log('📭 未找到该用户的 Bin');
+      return null;
+    } catch (error) {
+      console.error('❌ 查找 Bin 失败:', error);
+      return null;
+    }
+  }
+
   // 上传数据到 JSONBin.io（确保上传完整数据）- 使用 latest 端点避免版本冲突
   async uploadToCloud(data) {
     try {
@@ -444,17 +519,49 @@ class DataSyncService {
         }
       }
       
-      // 如果没有 binId 或更新失败，创建新 bin
+      // 如果没有 binId 或更新失败，先尝试查找已存在的 Bin
       if (!binId || !response || !response.ok) {
-        console.log('✨ 创建新 Bin');
-        // 使用用户ID作为 Bin 名称的一部分，方便识别
-        headers['X-Bin-Name'] = `life-system-${this.userId}`;
+        console.log('🔍 尝试查找已存在的用户 Bin...');
+        const foundBinId = await this.findUserBin();
         
-        response = await fetch('https://api.jsonbin.io/v3/b', {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(payload)
-        });
+        if (foundBinId) {
+          console.log('✅ 找到已存在的 Bin，将使用:', foundBinId);
+          this.binId = foundBinId;
+          localStorage.setItem('jsonbin_id', foundBinId);
+          
+          // 尝试更新找到的 Bin
+          try {
+            response = await fetch(`https://api.jsonbin.io/v3/b/${foundBinId}`, {
+              method: 'PUT',
+              headers,
+              body: JSON.stringify(payload)
+            });
+            
+            if (response.ok) {
+              console.log('✅ 成功更新已存在的 Bin');
+              binId = foundBinId;
+            } else {
+              console.warn('⚠️ 更新已存在的 Bin 失败，将创建新 Bin');
+              binId = null;
+            }
+          } catch (err) {
+            console.warn('⚠️ 更新已存在的 Bin 出错，将创建新 Bin:', err);
+            binId = null;
+          }
+        }
+        
+        // 如果仍然没有 binId，创建新 bin
+        if (!binId) {
+          console.log('✨ 创建新 Bin');
+          // 使用用户ID作为 Bin 名称的一部分，方便识别
+          headers['X-Bin-Name'] = `life-system-${this.userId}`;
+          
+          response = await fetch('https://api.jsonbin.io/v3/b', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(payload)
+          });
+        }
       }
 
       if (!response.ok) {
