@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronUp, ChevronDown, Star, Cloud, CloudOff, AlertCircle } from 'lucide-react';
 import { format, startOfWeek, addDays, addWeeks, subWeeks, isSameDay } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
@@ -19,6 +20,7 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
   const [quickTasks, setQuickTasks] = useState({});
   const [draggedTask, setDraggedTask] = useState(null);
   const [dragOverCell, setDragOverCell] = useState(null);
+  const [dragOverTask, setDragOverTask] = useState(null); // 跟踪悬停在哪个任务上
   const [timeTrackingPopup, setTimeTrackingPopup] = useState(null);
   const [taskTimeRecords, setTaskTimeRecords] = useState({});
   const [taskActionPopup, setTaskActionPopup] = useState(null);
@@ -396,6 +398,11 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
     
     // 恢复文本选择
     document.body.style.userSelect = '';
+    
+    // 清理拖拽状态
+    setDraggedTask(null);
+    setDragOverCell(null);
+    setDragOverTask(null);
   };
 
   const handleDragOver = (e, dayKey, slotId) => {
@@ -408,25 +415,49 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
     setDragOverCell(null);
   };
 
-  const handleDrop = (e, targetDayKey, targetSlotId) => {
+  const handleDrop = (e, targetDayKey, targetSlotId, targetTaskIndex = null) => {
     e.preventDefault();
     setDragOverCell(null);
+    setDragOverTask(null);
     
     if (!draggedTask) return;
     
     const { task, sourceDayKey, sourceSlotId, sourceTaskIndex } = draggedTask;
     
-    // 如果拖拽到同一位置，不做任何操作
+    // 如果拖拽到同一格子
     if (sourceDayKey === targetDayKey && sourceSlotId === targetSlotId) {
+      // 如果是拖到同一位置，不做任何操作
+      if (targetTaskIndex === null || sourceTaskIndex === targetTaskIndex) {
+        setDraggedTask(null);
+        return;
+      }
+      
+      // 同一格内重新排序
+      const tasks = [...quickTasks[sourceDayKey][sourceSlotId]];
+      const [movedTask] = tasks.splice(sourceTaskIndex, 1);
+      const newIndex = targetTaskIndex > sourceTaskIndex ? targetTaskIndex - 1 : targetTaskIndex;
+      tasks.splice(newIndex, 0, movedTask);
+      
+      const newQuickTasks = {
+        ...quickTasks,
+        [sourceDayKey]: {
+          ...quickTasks[sourceDayKey],
+          [sourceSlotId]: tasks
+        }
+      };
+      
+      setQuickTasks(newQuickTasks);
+      saveWithSync('quickTasks', newQuickTasks);
       setDraggedTask(null);
       return;
     }
     
+    // 跨格子移动
     // 创建新的任务对象，保持原有属性但更新ID
     const newTask = {
       ...task,
       id: `${targetDayKey}-${targetSlotId}-${Date.now()}`,
-      completed: false, // 拖拽到新位置时重置完成状态
+      completed: task.completed, // 保持原有的完成状态
       estimatedTime: task.estimatedTime || 0
     };
     
@@ -448,9 +479,14 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
     // 确保目标位置有数据结构
     const targetTasks = quickTasks[targetDayKey]?.[targetSlotId] || [];
     
-    // 添加到目标位置（插入到最后一个非空任务后）
-    const lastNonEmptyIndex = targetTasks.findLastIndex(t => t.text || t.time);
-    const insertIndex = lastNonEmptyIndex >= 0 ? lastNonEmptyIndex + 1 : 0;
+    // 如果指定了目标任务索引，插入到该位置；否则插入到最后一个非空任务后
+    let insertIndex;
+    if (targetTaskIndex !== null) {
+      insertIndex = targetTaskIndex;
+    } else {
+      const lastNonEmptyIndex = targetTasks.findLastIndex(t => t.text || t.time);
+      insertIndex = lastNonEmptyIndex >= 0 ? lastNonEmptyIndex + 1 : 0;
+    }
     
     const newTargetTasks = [...targetTasks];
     newTargetTasks.splice(insertIndex, 0, newTask);
@@ -906,8 +942,26 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
                               : ''
                           } ${
                             draggedTask && draggedTask.task.id === quickTask.id ? 'opacity-50' : ''
+                          } ${
+                            dragOverTask && dragOverTask.dayKey === dayKey && dragOverTask.slotId === slot.id && dragOverTask.taskIndex === index ? 'border-t-2 border-blue-500' : ''
                           }`}
                           title={hasContent ? '点击左侧图标拖拽任务' : ''}
+                          onDragOver={(e) => {
+                            if (draggedTask) {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              // 只在有内容或者是拖到空行（用于插入到最后）时显示高亮
+                              setDragOverTask({ dayKey, slotId: slot.id, taskIndex: index });
+                            }
+                          }}
+                          onDragLeave={(e) => {
+                            e.stopPropagation();
+                            setDragOverTask(null);
+                          }}
+                          onDrop={(e) => {
+                            e.stopPropagation();
+                            handleDrop(e, dayKey, slot.id, index);
+                          }}
                           onContextMenu={(e) => {
                             if (hasContent) {
                               e.preventDefault(); // 阻止默认右键菜单
@@ -964,6 +1018,28 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
                                 toggleTaskComplete(dayKey, slot.id, index, e);
                               }}
                               onDragStart={(e) => e.preventDefault()}
+                              onClick={(e) => {
+                                // 点击时，如果任务已完成，显示时间记录弹窗
+                                if (quickTask.completed) {
+                                  e.stopPropagation();
+                                  // 清除任何待关闭的定时器
+                                  if (closeTimeoutRef.current) {
+                                    clearTimeout(closeTimeoutRef.current);
+                                    closeTimeoutRef.current = null;
+                                  }
+                                  mouseTrackingRef.current = true;
+                                  const rect = e.currentTarget.getBoundingClientRect();
+                                  setTimeTrackingPopup({
+                                    taskId: quickTask.id,
+                                    x: rect.left,
+                                    y: rect.bottom + 2, // checkbox正下方，间隔2px
+                                    dayKey,
+                                    slotId: slot.id,
+                                    taskIndex: index,
+                                    taskColor: quickTask.color || 'green'
+                                  });
+                                }
+                              }}
                               onMouseEnter={(e) => {
                                 // 只有在任务已完成时，悬停才显示时间记录弹窗
                                 if (quickTask.completed) {
@@ -974,11 +1050,10 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
                                   }
                                   mouseTrackingRef.current = true;
                                   const rect = e.currentTarget.getBoundingClientRect();
-                                  const yOffset = slot.id === 'evening' ? -35 : 25;
                                   setTimeTrackingPopup({
                                     taskId: quickTask.id,
-                                    x: rect.left - 10,
-                                    y: rect.top + yOffset,
+                                    x: rect.left,
+                                    y: rect.bottom + 2, // checkbox正下方，间隔2px
                                     dayKey,
                                     slotId: slot.id,
                                     taskIndex: index,
@@ -993,12 +1068,12 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
                                   if (!mouseTrackingRef.current) {
                                     setTimeTrackingPopup(null);
                                   }
-                                }, 300);
+                                }, 1000); // 增加延迟时间到1000ms（1秒）
                               }}
                               className={`w-3 h-3 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 cursor-pointer z-10 ${
                                 quickTask.completed ? 'opacity-80' : ''
                               }`}
-                              title={quickTask.completed ? "悬停记录用时" : "点击完成任务"}
+                              title={quickTask.completed ? "点击或悬停记录用时" : "点击完成任务"}
                             />
                           </div>
                         )}
@@ -1091,7 +1166,7 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
       </div>
 
       {/* 时间记录弹窗 */}
-      {timeTrackingPopup && (() => {
+      {timeTrackingPopup && createPortal((() => {
         const colorClasses = getColorClasses(timeTrackingPopup.taskColor);
         
         // 确保弹窗位置在屏幕内
@@ -1104,10 +1179,11 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
         
         return (
           <div
-            className="time-tracking-popup fixed bg-white border border-gray-300 rounded shadow-xl p-2 z-[9999]"
+            className="time-tracking-popup fixed bg-white border border-gray-300 rounded shadow-xl p-2"
             style={{
               left: `${x}px`,
-              top: `${y}px`
+              top: `${y}px`,
+              zIndex: 2147483647
             }}
             onMouseEnter={() => {
               // 鼠标进入弹窗时，清除关闭定时器
@@ -1235,7 +1311,7 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
             )}
           </div>
         );
-      })()}
+      })(), document.body)}
 
       {/* 任务操作弹窗 */}
       {taskActionPopup && (() => {
