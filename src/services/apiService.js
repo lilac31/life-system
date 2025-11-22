@@ -353,12 +353,25 @@ class DataSyncService {
     console.log('✅ Bin ID 已清除，下次保存时将创建新 Bin');
   }
 
-  // 查找该用户的 Bin（通过名称或遍历所有 Bin）
+  // 生成固定的 Bin ID（基于用户ID）
+  // 注意：这不是真实的 Bin ID，而是用于 Collection 查找的标识
+  generateBinIdentifier() {
+    // 将用户ID转换为固定标识
+    // 由于 Bin ID 是由 JSONBin 服务器生成的，我们无法预先确定
+    // 所以改用 Collection Key 机制
+    return `life-system-${this.userId}`;
+  }
+
+  // 查找该用户的 Bin（改进版）
   async findUserBin() {
     try {
       const apiKey = this.getApiKey();
       
-      console.log('🔍 查找用户的云端 Bin...');
+      console.log('');
+      console.log('═══════════════════════════════════════');
+      console.log('🔍 开始查找用户的云端 Bin');
+      console.log('用户ID:', this.userId);
+      console.log('═══════════════════════════════════════');
       
       // 获取所有 Bin 列表
       const response = await fetch('https://api.jsonbin.io/v3/b', {
@@ -372,40 +385,76 @@ class DataSyncService {
         return null;
       }
       
-      const bins = await response.json();
-      console.log('📋 找到', bins.length || 0, '个 Bin');
+      const result = await response.json();
+      console.log('📡 API 原始返回:', result);
       
-      // 查找名称匹配的 Bin
-      const targetBinName = `life-system-${this.userId}`;
-      const matchedBin = bins.find(bin => bin.record === targetBinName);
-      
-      if (matchedBin) {
-        console.log('✅ 找到匹配的 Bin:', matchedBin.id);
-        return matchedBin.id;
+      // 处理不同的返回格式
+      let bins = [];
+      if (Array.isArray(result)) {
+        bins = result;
+      } else if (result.bins && Array.isArray(result.bins)) {
+        bins = result.bins;
+      } else if (result.record && Array.isArray(result.record)) {
+        bins = result.record;
       }
       
-      // 如果没找到，遍历所有 Bin 检查 _metadata.userId
-      console.log('🔍 通过元数据查找用户 Bin...');
+      if (!bins || bins.length === 0) {
+        console.log('📭 未找到任何 Bin，这可能是首次使用');
+        console.log('═══════════════════════════════════════');
+        return null;
+      }
+      
+      console.log('📋 找到', bins.length, '个 Bin');
+      console.log('开始逐个检查 Bin 的 _metadata.userId...');
+      console.log('');
+      
+      // 遍历所有 Bin
+      let checkedCount = 0;
       for (const bin of bins) {
+        checkedCount++;
         try {
-          const binResponse = await fetch(`https://api.jsonbin.io/v3/b/${bin.id}/latest`, {
+          // 兼容不同的 ID 字段名
+          const binId = bin.id || bin.record || bin.binId;
+          if (!binId) {
+            console.log(`⏭️  Bin #${checkedCount}: 无效（没有ID）`);
+            continue;
+          }
+          
+          console.log(`🔍 检查 Bin #${checkedCount}/${bins.length}: ${binId}`);
+          
+          const binResponse = await fetch(`https://api.jsonbin.io/v3/b/${binId}/latest`, {
             headers: { 'X-Master-Key': apiKey }
           });
           
-          if (binResponse.ok) {
-            const binData = await binResponse.json();
-            if (binData.record?._metadata?.userId === this.userId) {
-              console.log('✅ 找到匹配用户ID的 Bin:', bin.id);
-              return bin.id;
-            }
+          if (!binResponse.ok) {
+            console.log(`   ❌ 读取失败 (${binResponse.status})`);
+            continue;
+          }
+          
+          const binData = await binResponse.json();
+          const metadata = binData.record?._metadata;
+          const binUserId = metadata?.userId;
+          
+          console.log(`   📊 用户ID: ${binUserId || '(无)'}`);
+          
+          if (binUserId === this.userId) {
+            console.log('');
+            console.log('✅✅✅ 找到匹配的 Bin！✅✅✅');
+            console.log('Bin ID:', binId);
+            console.log('用户ID:', binUserId);
+            console.log('═══════════════════════════════════════');
+            return binId;
           }
         } catch (err) {
-          // 忽略单个 Bin 的错误
+          console.log(`   ⚠️  检查出错:`, err.message);
           continue;
         }
       }
       
-      console.log('📭 未找到该用户的 Bin');
+      console.log('');
+      console.log('📭 未找到匹配的 Bin');
+      console.log(`已检查 ${checkedCount} 个 Bin，均不匹配当前用户ID`);
+      console.log('═══════════════════════════════════════');
       return null;
     } catch (error) {
       console.error('❌ 查找 Bin 失败:', error);

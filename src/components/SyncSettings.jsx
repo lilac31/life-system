@@ -177,22 +177,53 @@ export default function SyncSettings({ onClose }) {
           ) : (
             <div className="space-y-4">
               {/* 状态显示 */}
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4 space-y-2">
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4 space-y-3">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-gray-600">用户ID:</span>
-                  <span className="font-mono text-green-700">{autoUserId}</span>
+                  <span className="font-mono text-green-700 text-xs">{autoUserId}</span>
                 </div>
                 {binId && (
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-600">Bin ID:</span>
-                    <span className="font-mono text-green-700 text-xs">{binId.substring(0, 12)}...</span>
+                  <>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-600">Bin ID:</span>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(binId);
+                          alert('✅ Bin ID 已复制！\n\n在其他设备上打开控制台，运行：\nlocalStorage.setItem("jsonbin_id", "' + binId + '");\n然后刷新页面即可同步。');
+                        }}
+                        className="font-mono text-green-700 text-xs hover:text-green-900 hover:underline cursor-pointer"
+                        title="点击复制 Bin ID"
+                      >
+                        {binId.substring(0, 12)}... 📋
+                      </button>
+                    </div>
+                    <div className="pt-2 border-t border-green-200">
+                      <p className="text-xs text-green-700 mb-2">
+                        ✅ 多端同步已启用！
+                      </p>
+                      <details className="text-xs text-gray-600">
+                        <summary className="cursor-pointer hover:text-gray-800 font-medium">
+                          💡 如何在其他设备同步？
+                        </summary>
+                        <div className="mt-2 p-2 bg-white rounded border border-green-200">
+                          <p className="font-medium mb-1">方法一：自动查找（推荐）</p>
+                          <p className="mb-2">在其他设备输入相同的 API Key，系统会自动查找并连接到此 Bin。</p>
+                          <p className="font-medium mb-1">方法二：手动设置</p>
+                          <p>1. 点击 Bin ID 复制</p>
+                          <p>2. 在其他设备的浏览器控制台运行复制的代码</p>
+                          <p>3. 刷新页面</p>
+                        </div>
+                      </details>
+                    </div>
+                  </>
+                )}
+                {!binId && (
+                  <div className="pt-2 border-t border-green-200">
+                    <p className="text-xs text-amber-700">
+                      ⏳ 等待首次保存创建云端存储...
+                    </p>
                   </div>
                 )}
-                <div className="pt-2 border-t border-green-200">
-                  <p className="text-xs text-green-700">
-                    ✅ 多端同步已启用！所有数据将自动同步到云端。
-                  </p>
-                </div>
               </div>
 
               {/* 更换 API Key */}
