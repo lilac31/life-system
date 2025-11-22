@@ -416,41 +416,23 @@ class DataSyncService {
           
           if (!response.ok) {
             const errorText = await response.text();
-            console.warn('⚠️ 更新失败:', response.status, errorText);
+            console.error('❌ 更新 Bin 失败:', response.status, errorText);
             
-            // 如果是 404，说明 Bin 不存在或无权限（用旧API Key创建的），创建新的
-            if (response.status === 404) {
-              console.log('📭 Bin 不存在或无权限（可能是用旧 API Key 创建的），创建新 Bin');
-              console.log('🗑️ 清理无法访问的 Bin ID:', binId);
-              binId = null;
-              this.binId = null;
-              localStorage.removeItem('jsonbin_id');
-            } 
-            // 如果是 400 或其他错误，也尝试创建新 Bin
-            else if (response.status === 400) {
-              console.warn('⚠️ Bin 数据问题，创建新 Bin');
-              binId = null;
-              this.binId = null;
-              localStorage.removeItem('jsonbin_id');
-            } else {
-              throw new Error(`更新失败: ${response.status} ${errorText}`);
-            }
+            // 不要自动清除 Bin ID！让用户知道出错了
+            throw new Error(`更新 Bin 失败 (${response.status}): ${errorText}`);
           } else {
             console.log('✅ Bin 更新成功');
           }
         } catch (fetchError) {
           console.error('❌ 更新请求错误:', fetchError);
-          // 网络错误或其他问题，尝试创建新 Bin
-          console.log('🔄 将尝试创建新 Bin');
-          binId = null;
-          this.binId = null;
-          localStorage.removeItem('jsonbin_id');
+          // 不创建新 Bin，直接抛出错误
+          throw fetchError;
         }
       }
       
-      // 如果没有 binId 或更新失败，创建新 bin
-      if (!binId || !response || !response.ok) {
-        console.log('✨ 创建新 Bin');
+      // 如果没有 binId，创建新 bin（只在首次使用时）
+      if (!binId) {
+        console.log('✨ 首次使用，创建新 Bin');
         // 使用用户ID作为 Bin 名称的一部分，方便识别
         headers['X-Bin-Name'] = `life-system-${this.userId}`;
         
@@ -459,11 +441,21 @@ class DataSyncService {
           headers,
           body: JSON.stringify(payload)
         });
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('❌ 创建 Bin 失败:', response.status, errorText);
+          throw new Error(`创建 Bin 失败: ${response.status} ${errorText}`);
+        }
+      }
+          body: JSON.stringify(payload)
+        });
       }
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('❌ 请求失败:', response.status, errorText);
+      // 检查响应是否成功
+      if (!response || !response.ok) {
+        const errorText = response ? await response.text() : '无响应';
+        console.error('❌ 请求失败:', response?.status || 'unknown', errorText);
         
         try {
           const errorJson = JSON.parse(errorText);
@@ -472,43 +464,46 @@ class DataSyncService {
           // 忽略 JSON 解析错误
         }
         
-        throw new Error(`操作失败: ${response.status} ${errorText}`);
+        throw new Error(`操作失败: ${response?.status || 'unknown'} ${errorText}`);
       }
 
       const result = await response.json();
       console.log('✅ 操作成功!');
       
-      // JSONBin 返回的 Bin ID
-      const newBinId = result.metadata?.parentId || result.metadata?.id;
-      
-      if (!newBinId) {
-        console.error('❌ 无法从响应中获取 Bin ID，完整响应:', result);
-        throw new Error('无法获取 Bin ID');
+      // 只在创建新 Bin 时保存 Bin ID（更新时不需要）
+      if (!binId) {
+        // JSONBin 返回的 Bin ID
+        const newBinId = result.metadata?.parentId || result.metadata?.id;
+        
+        if (!newBinId) {
+          console.error('❌ 无法从响应中获取 Bin ID，完整响应:', result);
+          throw new Error('无法获取 Bin ID');
+        }
+        
+        console.log('✅ 新创建的 Bin ID:', newBinId);
+        
+        // 保存 Bin ID
+        this.binId = newBinId;
+        localStorage.setItem('jsonbin_id', newBinId);
+        
+        // 重要：在控制台显示 Bin ID，方便用户在其他设备配置
+        console.log('');
+        console.log('═══════════════════════════════════════════════════════');
+        console.log('🔑 重要：多设备同步配置');
+        console.log('═══════════════════════════════════════════════════════');
+        console.log('📱 如需在其他设备同步，请保存以下信息：');
+        console.log('');
+        console.log('   Bin ID:', newBinId);
+        console.log('');
+        console.log('💡 在其他设备上：');
+        console.log('   1. 配置相同的 API Key');
+        console.log('   2. 点击"使用已有数据"');
+        console.log('   3. 粘贴 Bin ID 并保存');
+        console.log('═══════════════════════════════════════════════════════');
+        console.log('');
+      } else {
+        console.log('✅ 数据已更新到 Bin:', binId);
       }
-      
-      console.log('✅ Bin ID:', newBinId);
-      
-      // 保存 Bin ID 和更新时间
-      this.binId = newBinId;
-      localStorage.setItem('jsonbin_id', newBinId);
-      
-      // 重要：在控制台显示 Bin ID，方便用户在其他设备配置
-      console.log('');
-      console.log('═══════════════════════════════════════════════════════');
-      console.log('🔑 重要：多设备同步配置');
-      console.log('═══════════════════════════════════════════════════════');
-      console.log('📱 如需在其他设备同步，请保存以下信息：');
-      console.log('');
-      console.log('   用户ID:', this.userId);
-      console.log('   Bin ID:', newBinId);
-      console.log('');
-      console.log('💡 在其他设备上：');
-      console.log('   1. 配置相同的 API Key');
-      console.log('   2. 在浏览器控制台运行：');
-      console.log(`   localStorage.setItem('jsonbin_id', '${newBinId}');`);
-      console.log('   3. 刷新页面即可同步数据');
-      console.log('═══════════════════════════════════════════════════════');
-      console.log('');
       
       const updatedAt = result.metadata?.createdAt || 
                        result.metadata?.updatedAt || 
