@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 
 const TimeSelect = ({ value, color, completed = false, estimatedTime, onChange, onColorChange, onEstimatedTimeChange, className = "", slotId = "" }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -153,10 +154,10 @@ const TimeSelect = ({ value, color, completed = false, estimatedTime, onChange, 
         {value || ''}
       </button>
 
-      {isOpen && (
+      {isOpen && createPortal(
         <div
           ref={dropdownRef}
-          className="fixed bg-white border border-gray-300 rounded-md shadow-xl z-[9999] flex flex-col"
+          className="fixed rounded-md shadow-2xl flex flex-col"
           style={{
             top: buttonRef.current ? 
               Math.min(
@@ -170,13 +171,17 @@ const TimeSelect = ({ value, color, completed = false, estimatedTime, onChange, 
                   buttonRef.current.getBoundingClientRect().left,
                   window.innerWidth - 100
                 )
-              ) : 'auto'
+              ) : 'auto',
+            zIndex: 2147483647,
+            backgroundColor: '#ffffff',
+            opacity: 1,
+            position: 'fixed'
           }}
         >
           {/* 上半部分：颜色和时间选择 */}
-          <div className="flex">
+          <div className="flex" style={{ backgroundColor: '#ffffff', position: 'relative', zIndex: 2147483647 }}>
             {/* 颜色选择区域 */}
-            <div className="w-20 p-2 border-r border-gray-200">
+            <div className="w-20 p-2 border-r border-gray-200" style={{ backgroundColor: '#ffffff', position: 'relative', zIndex: 2147483647 }}>
               <div className="text-xs text-gray-500 mb-1.5 text-center">颜色</div>
               <div className="flex flex-col gap-1.5 items-center">
                 {colors.map((colorOption) => (
@@ -187,18 +192,20 @@ const TimeSelect = ({ value, color, completed = false, estimatedTime, onChange, 
                       color === colorOption.value ? 'ring-2 ring-blue-400 ring-offset-0' : ''
                     }`}
                     title={`${colorOption.name} (${colorOption.letter})`}
+                    style={{ position: 'relative', zIndex: 2147483647 }}
                   >
-                    <span className="text-[10px] font-bold">{colorOption.letter}</span>
+                    <span className="text-[10px] font-bold" style={{ position: 'relative', zIndex: 2147483647 }}>{colorOption.letter}</span>
                   </button>
                 ))}
               </div>
             </div>
             
             {/* 时间选择区域 */}
-            <div className="w-20 max-h-56 overflow-y-auto bg-gray-50">
+            <div className="w-20 max-h-56 overflow-y-auto" style={{ backgroundColor: '#ffffff', position: 'relative', zIndex: 2147483647 }}>
               <button
                 onClick={clearTime}
                 className="w-full text-left px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 border-b border-gray-200"
+                style={{ position: 'relative', zIndex: 2147483647 }}
               >
                 清除
               </button>
@@ -210,6 +217,7 @@ const TimeSelect = ({ value, color, completed = false, estimatedTime, onChange, 
                   className={`w-full text-left px-2 py-1 text-xs hover:bg-blue-50 transition-colors ${
                     value === time ? 'bg-blue-100 text-blue-700' : 'text-gray-700'
                   }`}
+                  style={{ position: 'relative', zIndex: 2147483647 }}
                 >
                   {time}
                 </button>
@@ -251,7 +259,8 @@ const TimeSelect = ({ value, color, completed = false, estimatedTime, onChange, 
               </div>
             </div>
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

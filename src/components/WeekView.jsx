@@ -385,11 +385,17 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
     
     // 添加拖拽时的视觉反馈
     e.target.style.opacity = '0.5';
+    
+    // 禁用文本选择
+    document.body.style.userSelect = 'none';
   };
 
   const handleDragEnd = (e) => {
     // 恢复拖拽元素的透明度
     e.target.style.opacity = '1';
+    
+    // 恢复文本选择
+    document.body.style.userSelect = '';
   };
 
   const handleDragOver = (e, dayKey, slotId) => {
@@ -897,7 +903,7 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
                           className={`flex items-center mb-1 group rounded p-1 ${hasContent ? 'cursor-move hover:shadow-sm hover:bg-gray-50' : ''} ${
                             highlightedColor && quickTask.color === highlightedColor 
                               ? `ring-2 ring-opacity-50 ${getColorClasses(highlightedColor).text.replace('text-', 'ring-')}` 
-                              : (quickTask.completed ? 'opacity-60' : '')
+                              : ''
                           } ${
                             draggedTask && draggedTask.task.id === quickTask.id ? 'opacity-50' : ''
                           }`}
@@ -929,9 +935,20 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
                             transition: 'all 0.2s ease'
                           }}
                         >
+                        {/* 拖拽手柄 - 只在有内容时显示 */}
+                        {hasContent && (
+                          <div 
+                            className="flex-shrink-0 mr-0.5 cursor-move hover:bg-gray-200 rounded px-0.5"
+                            onMouseDown={(e) => e.stopPropagation()}
+                            title="按住拖拽"
+                          >
+                            <span className="text-gray-400 text-xs">⋮⋮</span>
+                          </div>
+                        )}
+                        
                         {/* Checkbox - 只在有内容时显示 */}
                         {hasContent && (
-                          <div className="relative mr-1 flex-shrink-0">
+                          <div className="relative mr-1 flex-shrink-0" onDragStart={(e) => e.preventDefault()}>
                             <input
                               type="checkbox"
                               checked={quickTask.completed || false}
@@ -940,6 +957,7 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
                                 setTaskActionPopup(null); // 关闭任务操作弹窗
                                 toggleTaskComplete(dayKey, slot.id, index, e);
                               }}
+                              onDragStart={(e) => e.preventDefault()}
                               onMouseEnter={(e) => {
                                 // 只有在任务已完成时，悬停才显示时间记录弹窗
                                 if (quickTask.completed) {
@@ -980,7 +998,7 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
                         )}
                           
                           {/* 时间选择器区域 */}
-                          <div className="flex-shrink-0">
+                          <div className="flex-shrink-0" style={{ position: 'relative', zIndex: 999998 }} onDragStart={(e) => e.preventDefault()}>
                             <TimeSelect
                               value={quickTask.time}
                               color={quickTask.color}
@@ -1001,7 +1019,7 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
                           )}
                           
                           {/* 内容输入区域 */}
-                          <div className="flex-1 flex items-start overflow-hidden">
+                          <div className={`flex-1 flex items-start overflow-hidden ${quickTask.completed ? 'opacity-60' : ''}`} onDragStart={(e) => e.preventDefault()}>
                             <textarea
                               value={quickTask.text}
                               onChange={(e) => {
@@ -1013,6 +1031,7 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
                                   : (quickTask.completed ? 'line-through text-gray-500' : 'text-gray-900')
                               }`}
                               onClick={(e) => e.stopPropagation()}
+                              onDragStart={(e) => e.preventDefault()}
                               rows={1}
                               style={{ minHeight: '20px', maxHeight: '60px', width: '100%', boxSizing: 'border-box' }}
                               onInput={(e) => {
