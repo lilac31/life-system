@@ -448,9 +448,6 @@ class DataSyncService {
           throw new Error(`创建 Bin 失败: ${response.status} ${errorText}`);
         }
       }
-          body: JSON.stringify(payload)
-        });
-      }
 
       // 检查响应是否成功
       if (!response || !response.ok) {
