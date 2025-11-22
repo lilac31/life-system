@@ -9,7 +9,8 @@ import SyncSettings from './components/SyncSettings';
 import SyncDebugger from './components/SyncDebugger';
 import DataImportExport from './components/DataImportExport';
 import DataDebugger from './components/DataDebugger';
-import { dataAPI, dataSyncService } from './services/apiService';
+import { dataAPI, dataSyncService, useDataSync } from './services/apiService';
+import { RefreshCw } from 'lucide-react';
 
 function App() {
   const [tasks, setTasks] = useState([]);
@@ -20,6 +21,25 @@ function App() {
   const [dataUpdateKey, setDataUpdateKey] = useState(0); // 用于触发子组件重新渲染
   const [showDebugger, setShowDebugger] = useState(false); // 默认隐藏调试器
   const [showImportExport, setShowImportExport] = useState(false); // 显示导入/导出
+  const [isSyncingManually, setIsSyncingManually] = useState(false); // 手动同步状态
+  
+  // 获取同步状态
+  const { isOnline, syncStatus, manualSync } = useDataSync();
+
+  // 手动刷新同步
+  const handleManualSync = async () => {
+    if (!isOnline || syncStatus === 'syncing' || isSyncingManually) return;
+    
+    setIsSyncingManually(true);
+    try {
+      await manualSync();
+      setDataUpdateKey(prev => prev + 1); // 触发界面刷新
+    } catch (error) {
+      console.error('手动同步失败:', error);
+    } finally {
+      setIsSyncingManually(false);
+    }
+  };
 
   // 监听键盘快捷键切换调试器
   useEffect(() => {
@@ -171,6 +191,26 @@ function App() {
           <div className="flex items-center justify-between">
             <h1 className="text-xl font-bold text-gray-800"></h1>
             <div className="flex items-center gap-2">
+              {/* 手动刷新同步按钮 */}
+              {isOnline && (
+                <button
+                  onClick={handleManualSync}
+                  disabled={syncStatus === 'syncing' || isSyncingManually}
+                  className={`p-2 rounded hover:bg-gray-100 transition-colors ${
+                    syncStatus === 'syncing' || isSyncingManually ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
+                  title="手动刷新同步数据"
+                >
+                  <RefreshCw 
+                    size={18} 
+                    className={`${
+                      syncStatus === 'syncing' || isSyncingManually 
+                        ? 'animate-spin text-blue-500' 
+                        : 'text-gray-600 hover:text-purple-600'
+                    }`}
+                  />
+                </button>
+              )}
               <button
                 onClick={() => setShowSyncSettings(true)}
                 className="px-3 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 text-sm flex items-center gap-1"
