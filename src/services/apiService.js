@@ -228,20 +228,9 @@ class DataSyncService {
         this.binId = savedBinId;
         console.log('📦 使用已保存的 Bin ID:', this.binId);
       } else {
-        // 如果本地没有 Bin ID，尝试从云端查找
-        console.log('🔍 本地无 Bin ID，尝试从云端查找...');
-        try {
-          const foundBinId = await this.findUserBin();
-          if (foundBinId) {
-            this.binId = foundBinId;
-            localStorage.setItem('jsonbin_id', foundBinId);
-            console.log('✅ 从云端找到 Bin ID:', foundBinId);
-          } else {
-            console.log('📭 云端未找到该用户的 Bin，将在首次保存时创建');
-          }
-        } catch (error) {
-          console.warn('⚠️ 查找云端 Bin 失败:', error.message);
-        }
+        // 如果本地没有 Bin ID，将在首次保存时创建
+        console.log('📭 本地无 Bin ID，将在首次保存时创建');
+        console.log('💡 如需同步已有数据，请在同步设置中输入 Bin ID');
       }
       
       return generatedUserId;
@@ -353,115 +342,6 @@ class DataSyncService {
     console.log('✅ Bin ID 已清除，下次保存时将创建新 Bin');
   }
 
-  // 生成固定的 Bin ID（基于用户ID）
-  // 注意：这不是真实的 Bin ID，而是用于 Collection 查找的标识
-  generateBinIdentifier() {
-    // 将用户ID转换为固定标识
-    // 由于 Bin ID 是由 JSONBin 服务器生成的，我们无法预先确定
-    // 所以改用 Collection Key 机制
-    return `life-system-${this.userId}`;
-  }
-
-  // 查找该用户的 Bin（改进版）
-  async findUserBin() {
-    try {
-      const apiKey = this.getApiKey();
-      
-      console.log('');
-      console.log('═══════════════════════════════════════');
-      console.log('🔍 开始查找用户的云端 Bin');
-      console.log('用户ID:', this.userId);
-      console.log('═══════════════════════════════════════');
-      
-      // 获取所有 Bin 列表
-      const response = await fetch('https://api.jsonbin.io/v3/b', {
-        headers: {
-          'X-Master-Key': apiKey
-        }
-      });
-      
-      if (!response.ok) {
-        console.warn('⚠️ 获取 Bin 列表失败:', response.status);
-        return null;
-      }
-      
-      const result = await response.json();
-      console.log('📡 API 原始返回:', result);
-      
-      // 处理不同的返回格式
-      let bins = [];
-      if (Array.isArray(result)) {
-        bins = result;
-      } else if (result.bins && Array.isArray(result.bins)) {
-        bins = result.bins;
-      } else if (result.record && Array.isArray(result.record)) {
-        bins = result.record;
-      }
-      
-      if (!bins || bins.length === 0) {
-        console.log('📭 未找到任何 Bin，这可能是首次使用');
-        console.log('═══════════════════════════════════════');
-        return null;
-      }
-      
-      console.log('📋 找到', bins.length, '个 Bin');
-      console.log('开始逐个检查 Bin 的 _metadata.userId...');
-      console.log('');
-      
-      // 遍历所有 Bin
-      let checkedCount = 0;
-      for (const bin of bins) {
-        checkedCount++;
-        try {
-          // 兼容不同的 ID 字段名
-          const binId = bin.id || bin.record || bin.binId;
-          if (!binId) {
-            console.log(`⏭️  Bin #${checkedCount}: 无效（没有ID）`);
-            continue;
-          }
-          
-          console.log(`🔍 检查 Bin #${checkedCount}/${bins.length}: ${binId}`);
-          
-          const binResponse = await fetch(`https://api.jsonbin.io/v3/b/${binId}/latest`, {
-            headers: { 'X-Master-Key': apiKey }
-          });
-          
-          if (!binResponse.ok) {
-            console.log(`   ❌ 读取失败 (${binResponse.status})`);
-            continue;
-          }
-          
-          const binData = await binResponse.json();
-          const metadata = binData.record?._metadata;
-          const binUserId = metadata?.userId;
-          
-          console.log(`   📊 用户ID: ${binUserId || '(无)'}`);
-          
-          if (binUserId === this.userId) {
-            console.log('');
-            console.log('✅✅✅ 找到匹配的 Bin！✅✅✅');
-            console.log('Bin ID:', binId);
-            console.log('用户ID:', binUserId);
-            console.log('═══════════════════════════════════════');
-            return binId;
-          }
-        } catch (err) {
-          console.log(`   ⚠️  检查出错:`, err.message);
-          continue;
-        }
-      }
-      
-      console.log('');
-      console.log('📭 未找到匹配的 Bin');
-      console.log(`已检查 ${checkedCount} 个 Bin，均不匹配当前用户ID`);
-      console.log('═══════════════════════════════════════');
-      return null;
-    } catch (error) {
-      console.error('❌ 查找 Bin 失败:', error);
-      return null;
-    }
-  }
-
   // 上传数据到 JSONBin.io（确保上传完整数据）- 使用 latest 端点避免版本冲突
   async uploadToCloud(data) {
     try {
@@ -568,49 +448,17 @@ class DataSyncService {
         }
       }
       
-      // 如果没有 binId 或更新失败，先尝试查找已存在的 Bin
+      // 如果没有 binId 或更新失败，创建新 bin
       if (!binId || !response || !response.ok) {
-        console.log('🔍 尝试查找已存在的用户 Bin...');
-        const foundBinId = await this.findUserBin();
+        console.log('✨ 创建新 Bin');
+        // 使用用户ID作为 Bin 名称的一部分，方便识别
+        headers['X-Bin-Name'] = `life-system-${this.userId}`;
         
-        if (foundBinId) {
-          console.log('✅ 找到已存在的 Bin，将使用:', foundBinId);
-          this.binId = foundBinId;
-          localStorage.setItem('jsonbin_id', foundBinId);
-          
-          // 尝试更新找到的 Bin
-          try {
-            response = await fetch(`https://api.jsonbin.io/v3/b/${foundBinId}`, {
-              method: 'PUT',
-              headers,
-              body: JSON.stringify(payload)
-            });
-            
-            if (response.ok) {
-              console.log('✅ 成功更新已存在的 Bin');
-              binId = foundBinId;
-            } else {
-              console.warn('⚠️ 更新已存在的 Bin 失败，将创建新 Bin');
-              binId = null;
-            }
-          } catch (err) {
-            console.warn('⚠️ 更新已存在的 Bin 出错，将创建新 Bin:', err);
-            binId = null;
-          }
-        }
-        
-        // 如果仍然没有 binId，创建新 bin
-        if (!binId) {
-          console.log('✨ 创建新 Bin');
-          // 使用用户ID作为 Bin 名称的一部分，方便识别
-          headers['X-Bin-Name'] = `life-system-${this.userId}`;
-          
-          response = await fetch('https://api.jsonbin.io/v3/b', {
-            method: 'POST',
-            headers,
-            body: JSON.stringify(payload)
-          });
-        }
+        response = await fetch('https://api.jsonbin.io/v3/b', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(payload)
+        });
       }
 
       if (!response.ok) {

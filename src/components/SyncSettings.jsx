@@ -9,6 +9,8 @@ export default function SyncSettings({ onClose }) {
   const [isVerifyingApiKey, setIsVerifyingApiKey] = useState(false);
   const [autoUserId, setAutoUserId] = useState('');
   const [binId, setBinId] = useState('');
+  const [manualBinId, setManualBinId] = useState(''); // 手动输入的 Bin ID
+  const [showManualInput, setShowManualInput] = useState(false);
 
   useEffect(() => {
     const savedApiKey = localStorage.getItem('jsonbin_api_key');
@@ -184,34 +186,36 @@ export default function SyncSettings({ onClose }) {
                 </div>
                 {binId && (
                   <>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-600">Bin ID:</span>
+                    <div className="flex items-center justify-between text-sm gap-2">
+                      <span className="text-gray-600 flex-shrink-0">Bin ID:</span>
                       <button
                         onClick={() => {
                           navigator.clipboard.writeText(binId);
-                          alert('✅ Bin ID 已复制！\n\n在其他设备上打开控制台，运行：\nlocalStorage.setItem("jsonbin_id", "' + binId + '");\n然后刷新页面即可同步。');
+                          alert('✅ Bin ID 已复制到剪贴板！');
                         }}
-                        className="font-mono text-green-700 text-xs hover:text-green-900 hover:underline cursor-pointer"
-                        title="点击复制 Bin ID"
+                        className="font-mono text-green-700 text-xs hover:text-green-900 hover:underline cursor-pointer break-all text-right"
+                        title="点击复制完整 Bin ID"
                       >
-                        {binId.substring(0, 12)}... 📋
+                        {binId} 📋
                       </button>
                     </div>
                     <div className="pt-2 border-t border-green-200">
-                      <p className="text-xs text-green-700 mb-2">
+                      <p className="text-xs text-green-700 font-medium mb-2">
                         ✅ 多端同步已启用！
                       </p>
                       <details className="text-xs text-gray-600">
-                        <summary className="cursor-pointer hover:text-gray-800 font-medium">
-                          💡 如何在其他设备同步？
+                        <summary className="cursor-pointer hover:text-gray-800 font-medium mb-2">
+                          💡 如何在其他设备同步数据？
                         </summary>
-                        <div className="mt-2 p-2 bg-white rounded border border-green-200">
-                          <p className="font-medium mb-1">方法一：自动查找（推荐）</p>
-                          <p className="mb-2">在其他设备输入相同的 API Key，系统会自动查找并连接到此 Bin。</p>
-                          <p className="font-medium mb-1">方法二：手动设置</p>
-                          <p>1. 点击 Bin ID 复制</p>
-                          <p>2. 在其他设备的浏览器控制台运行复制的代码</p>
-                          <p>3. 刷新页面</p>
+                        <div className="mt-2 p-3 bg-white rounded border border-green-200 space-y-2">
+                          <p className="font-semibold text-green-800">方法：手动同步 Bin ID</p>
+                          <ol className="list-decimal list-inside space-y-1 text-gray-700">
+                            <li>在其他设备打开此应用</li>
+                            <li>进入"同步设置"，输入相同的 API Key</li>
+                            <li>点击"使用已有数据"</li>
+                            <li>粘贴上面的 Bin ID</li>
+                            <li>保存即可同步所有数据</li>
+                          </ol>
                         </div>
                       </details>
                     </div>
@@ -219,9 +223,56 @@ export default function SyncSettings({ onClose }) {
                 )}
                 {!binId && (
                   <div className="pt-2 border-t border-green-200">
-                    <p className="text-xs text-amber-700">
+                    <p className="text-xs text-amber-700 mb-2">
                       ⏳ 等待首次保存创建云端存储...
                     </p>
+                    {!showManualInput && (
+                      <button
+                        onClick={() => setShowManualInput(true)}
+                        className="text-xs text-blue-600 hover:text-blue-700 underline"
+                      >
+                        或者，使用其他设备的 Bin ID 同步数据 →
+                      </button>
+                    )}
+                    {showManualInput && (
+                      <div className="mt-3 space-y-2">
+                        <p className="text-xs text-gray-600">从其他设备复制 Bin ID 并粘贴到下方：</p>
+                        <input
+                          type="text"
+                          value={manualBinId}
+                          onChange={(e) => setManualBinId(e.target.value.trim())}
+                          placeholder="粘贴 Bin ID（24位字母数字）"
+                          className="w-full px-3 py-2 border border-gray-300 rounded text-xs font-mono focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            onClick={async () => {
+                              if (!/^[a-f0-9]{24}$/i.test(manualBinId)) {
+                                alert('❌ Bin ID 格式错误\n\n正确格式：24位字母和数字组合');
+                                return;
+                              }
+                              localStorage.setItem('jsonbin_id', manualBinId);
+                              setBinId(manualBinId);
+                              setShowManualInput(false);
+                              alert('✅ Bin ID 已保存！\n\n刷新页面后将同步该 Bin 的数据。');
+                              setTimeout(() => window.location.reload(), 1000);
+                            }}
+                            className="flex-1 px-3 py-2 bg-blue-500 text-white rounded text-xs font-medium hover:bg-blue-600"
+                          >
+                            保存 Bin ID
+                          </button>
+                          <button
+                            onClick={() => {
+                              setShowManualInput(false);
+                              setManualBinId('');
+                            }}
+                            className="px-3 py-2 border border-gray-300 rounded text-xs hover:bg-gray-50"
+                          >
+                            取消
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
