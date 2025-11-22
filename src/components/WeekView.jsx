@@ -907,10 +907,7 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
                           } ${
                             draggedTask && draggedTask.task.id === quickTask.id ? 'opacity-50' : ''
                           }`}
-                          draggable={hasContent}
-                          onDragStart={(e) => handleDragStart(e, dayKey, slot.id, index)}
-                          onDragEnd={handleDragEnd}
-                          title={hasContent ? '拖拽任务到其他时间段' : ''}
+                          title={hasContent ? '点击左侧图标拖拽任务' : ''}
                           onContextMenu={(e) => {
                             if (hasContent) {
                               e.preventDefault(); // 阻止默认右键菜单
@@ -939,10 +936,19 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
                         {hasContent && (
                           <div 
                             className="flex-shrink-0 mr-0.5 cursor-move hover:bg-gray-200 rounded px-0.5"
-                            onMouseDown={(e) => e.stopPropagation()}
+                            draggable={true}
+                            onDragStart={(e) => {
+                              e.stopPropagation();
+                              handleDragStart(e, dayKey, slot.id, index);
+                            }}
+                            onDragEnd={(e) => {
+                              e.stopPropagation();
+                              handleDragEnd(e);
+                            }}
+                            style={{ userSelect: 'none' }}
                             title="按住拖拽"
                           >
-                            <span className="text-gray-400 text-xs">⋮⋮</span>
+                            <span className="text-gray-400 text-xs" style={{ userSelect: 'none', pointerEvents: 'none' }}>⋮⋮</span>
                           </div>
                         )}
                         
