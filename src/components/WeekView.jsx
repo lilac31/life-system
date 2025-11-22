@@ -79,12 +79,13 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
       red: completed ? 'rgba(239, 68, 68, 0.1)' : 'rgba(239, 68, 68, 0.2)',      // M
       orange: completed ? 'rgba(249, 115, 22, 0.1)' : 'rgba(249, 115, 22, 0.2)', // T
       pink: completed ? 'rgba(236, 72, 153, 0.1)' : 'rgba(236, 72, 153, 0.2)',   // I
-      green: completed ? 'rgba(34, 197, 94, 0.1)' : 'rgba(34, 197, 94, 0.2)',    // R
+      green: completed ? 'rgba(34, 197, 94, 0.1)' : 'rgba(34, 197, 94, 0.2)',    // S
       purple: completed ? 'rgba(168, 85, 247, 0.1)' : 'rgba(168, 85, 247, 0.2)', // C
       blue: completed ? 'rgba(59, 130, 246, 0.1)' : 'rgba(59, 130, 246, 0.2)',   // E
       yellow: completed ? 'rgba(234, 179, 8, 0.1)' : 'rgba(234, 179, 8, 0.2)',   // X
       indigo: completed ? 'rgba(99, 102, 241, 0.1)' : 'rgba(99, 102, 241, 0.2)',  // B
-      tencent: completed ? 'rgba(0, 102, 255, 0.1)' : 'rgba(0, 102, 255, 0.2)'   // F
+      tencent: completed ? 'rgba(0, 102, 255, 0.1)' : 'rgba(0, 102, 255, 0.2)',   // F
+      cyan: completed ? 'rgba(6, 182, 212, 0.1)' : 'rgba(6, 182, 212, 0.2)'      // R
     };
     return colorMap[color] || 'transparent';
   };
@@ -160,7 +161,8 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
             text: '',
             time: '',
             color: '',
-            completed: false
+            completed: false,
+            estimatedTime: 0 // 默认预期0小时，需要手动添加
           }];
         }
       });
@@ -286,7 +288,8 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
         text: '',
         time: '',
         color: '',
-        completed: false
+        completed: false,
+        estimatedTime: 0
       }];
     }
     
@@ -310,7 +313,8 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
         text: '',
         time: '',
         color: '',
-        completed: false
+        completed: false,
+        estimatedTime: 0
       });
     }
     
@@ -416,7 +420,8 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
     const newTask = {
       ...task,
       id: `${targetDayKey}-${targetSlotId}-${Date.now()}`,
-      completed: false // 拖拽到新位置时重置完成状态
+      completed: false, // 拖拽到新位置时重置完成状态
+      estimatedTime: task.estimatedTime || 0
     };
     
     // 从源位置删除任务
@@ -429,7 +434,8 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
         text: '',
         time: '',
         color: '',
-        completed: false
+        completed: false,
+        estimatedTime: 0
       });
     }
     
@@ -538,7 +544,8 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
     const copiedTask = {
       ...task,
       id: `${dayKey}-${slotId}-${Date.now()}-copy`,
-      completed: false
+      completed: false,
+      estimatedTime: task.estimatedTime || 0
     };
     
     const newQuickTasks = {
@@ -568,7 +575,8 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
       blue: { bg: 'bg-blue-500', border: 'border-blue-500', hover: 'hover:bg-blue-50', text: 'text-blue-500' },
       yellow: { bg: 'bg-yellow-500', border: 'border-yellow-500', hover: 'hover:bg-yellow-50', text: 'text-yellow-500' },
       indigo: { bg: 'bg-indigo-500', border: 'border-indigo-500', hover: 'hover:bg-indigo-50', text: 'text-indigo-500' },
-      tencent: { bg: 'bg-[#0066FF]', border: 'border-[#0066FF]', hover: 'hover:bg-[#f0f7ff]', text: 'text-[#0066FF]' }
+      tencent: { bg: 'bg-[#0066FF]', border: 'border-[#0066FF]', hover: 'hover:bg-[#f0f7ff]', text: 'text-[#0066FF]' },
+      cyan: { bg: 'bg-cyan-500', border: 'border-cyan-500', hover: 'hover:bg-cyan-50', text: 'text-cyan-500' }
     };
     // 处理undefined、null或空字符串的情况
     if (!color || typeof color !== 'string') {
@@ -590,8 +598,8 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
 
   // 计算本周时间统计
   const getWeekTimeStatistics = () => {
-    const plannedColorStats = {}; // 计划时间（透明）
-    const actualColorStats = {};  // 实际时间（实色）
+    const plannedColorStats = {}; // 计划时间（所有任务，包括已完成和未完成）
+    const actualColorStats = {};  // 实际时间（仅已完成任务）
     
     weekDays.forEach(day => {
       const dayKey = format(day, 'yyyy-MM-dd');
@@ -599,14 +607,15 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
         const dayTasks = quickTasks[dayKey]?.[slot.id] || [];
         dayTasks.forEach(task => {
           if (task.color && (task.text || task.time)) { // 有颜色且有内容的任务
+            // 所有任务都计入计划时间（使用预期时间，默认1小时）
+            const estimatedHours = task.estimatedTime > 0 ? task.estimatedTime : 1;
+            plannedColorStats[task.color] = (plannedColorStats[task.color] || 0) + estimatedHours;
+            
+            // 已完成任务才计入实际时间
             if (task.completed) {
-              // 已完成任务：使用实际记录时间或默认30分钟
               const recordedTime = getTaskTimeRecord(task.id);
               const timeInHours = recordedTime > 0 ? recordedTime / 60 : 0.5;
               actualColorStats[task.color] = (actualColorStats[task.color] || 0) + timeInHours;
-            } else {
-              // 未完成任务：计划时间默认1小时
-              plannedColorStats[task.color] = (plannedColorStats[task.color] || 0) + 1;
             }
           }
         });
@@ -614,7 +623,7 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
     });
 
     // 按照颜色顺序返回数据
-    const colorOrder = ['red', 'orange', 'pink', 'green', 'purple', 'blue', 'yellow', 'indigo', 'tencent'];
+    const colorOrder = ['red', 'orange', 'pink', 'green', 'purple', 'blue', 'yellow', 'indigo', 'tencent', 'cyan'];
     const orderedPlannedStats = {};
     const orderedActualStats = {};
     
@@ -711,55 +720,62 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
       )}
       {/* 应用头部 */}
       <div className="flex items-center justify-between py-1">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">人生系统设计</h1>
-          <p className="text-gray-500 text-sm">
-            {format(weekStart, 'yyyy年MM月dd日', { locale: zhCN })} - {format(addDays(weekStart, 6), 'MM月dd日', { locale: zhCN })}
-          </p>
-        </div>
-        <div className="flex items-center space-x-4">
-          {/* 同步状态指示器 */}
-          <div className="flex items-center space-x-2">
-            {isOnline ? (
-              isSyncing ? (
-                <div className="flex items-center space-x-1 text-blue-500">
-                  <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                  <span className="text-xs text-blue-500">同步中</span>
-                </div>
-              ) : (
-                <div className="flex items-center space-x-1 text-green-500">
-                  <Cloud className="w-4 h-4" />
-                  <span className="text-xs text-green-500">
-                    {lastSync ? `已同步 ${format(lastSync, 'HH:mm')}` : '已同步'}
-                  </span>
-                </div>
-              )
-            ) : (
-              <div className="flex items-center space-x-1 text-gray-500">
-                <CloudOff className="w-4 h-4" />
-                <span className="text-xs text-gray-500">离线</span>
-              </div>
-            )}
-            {syncError && (
-              <div className="flex items-center space-x-1 text-red-500" title={syncError}>
-                <AlertCircle className="w-4 h-4" />
-              </div>
-            )}
+        <div className="flex items-center space-x-6">
+          <div>
+            <h1 className="text-xl font-bold text-gray-900">人生系统设计</h1>
+            <p className="text-gray-500 text-sm">
+              {format(weekStart, 'yyyy年MM月dd日', { locale: zhCN })} - {format(addDays(weekStart, 6), 'MM月dd日', { locale: zhCN })}
+            </p>
           </div>
           
+          {/* 同步设置和数据管理入口 - 与标题同一行 */}
+          <div className="flex items-center space-x-2">
+            {/* 同步状态指示器 */}
+            <div className="flex items-center space-x-2">
+              {isOnline ? (
+                isSyncing ? (
+                  <div className="flex items-center space-x-1 text-blue-500">
+                    <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                    <span className="text-xs text-blue-500">同步中</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center space-x-1 text-emerald-600">
+                    <Cloud className="w-4 h-4" />
+                    <span className="text-xs text-emerald-600">
+                      {lastSync ? `已同步 ${format(lastSync, 'HH:mm')}` : '已同步'}
+                    </span>
+                  </div>
+                )
+              ) : (
+                <div className="flex items-center space-x-1 text-gray-400">
+                  <CloudOff className="w-4 h-4" />
+                  <span className="text-xs text-gray-400">离线</span>
+                </div>
+              )}
+              {syncError && (
+                <div className="flex items-center space-x-1 text-red-500" title={syncError}>
+                  <AlertCircle className="w-4 h-4" />
+                </div>
+              )}
+            </div>
+            
+            <DataManager onImport={handleDataImport} />
+            <button
+              onClick={() => setShowDataRecovery(true)}
+              className="btn-secondary text-xs px-2 py-1 text-blue-600 hover:text-blue-700"
+              title="数据管理：备份、恢复、导入导出"
+            >
+              数据管理
+            </button>
+          </div>
+        </div>
+        
+        <div className="flex items-center space-x-4">
           {/* 导航栏 */}
           <Navigation currentView={currentView} onViewChange={onViewChange} />
-          <DataManager onImport={handleDataImport} />
-          <button
-            onClick={() => setShowDataRecovery(true)}
-            className="btn-secondary text-xs px-2 py-0.5 text-blue-600 hover:text-blue-700"
-            title="数据管理：备份、恢复、导入导出"
-          >
-            数据管理
-          </button>
           <button
             onClick={() => setCurrentWeek(new Date())}
-            className="btn-secondary text-xs px-2 py-0.5"
+            className="btn-secondary text-xs px-2 py-1"
           >
             本周
           </button>
@@ -770,13 +786,13 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
       <YearTimeline />
 
       {/* 本周最重要的三件事 - 单行显示 */}
-      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg px-4 py-2 border border-blue-200">
+      <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg px-4 py-2 border border-gray-200 shadow-sm">
         <div className="flex items-center gap-3">
           {getCurrentWeekImportantTasks().map((task, index) => (
             <div key={task.id} className="flex-1">
-              <div className="flex bg-white rounded border border-blue-200 focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-transparent transition-all overflow-hidden">
+              <div className="flex bg-white rounded border border-gray-200 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent transition-all overflow-hidden">
                 {/* TOP标签区域 */}
-                <div className="bg-yellow-400 text-white px-2 py-1.5 text-xs font-bold flex items-center justify-center min-w-10">
+                <div className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white px-2 py-1.5 text-xs font-bold flex items-center justify-center min-w-10">
                   TOP{index + 1}
                 </div>
                 {/* 输入区域 */}
@@ -784,7 +800,7 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
                   type="text"
                   value={task.text}
                   onChange={(e) => updateImportantTask(index, e.target.value)}
-                  className="flex-1 px-2 py-1.5 text-sm bg-transparent border-none focus:outline-none"
+                  className="flex-1 px-2 py-1.5 text-sm bg-transparent border-none focus:outline-none text-gray-900 placeholder:text-gray-400"
                 />
               </div>
             </div>
@@ -808,8 +824,8 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
                 <div
                   key={day.toString()}
                   className={`p-2 text-center font-medium border-l border-gray-200 ${
-                    isToday ? 'bg-blue-50 text-blue-900' : 
-                    isWeekend ? 'bg-gray-100 text-gray-700' : 'bg-gray-50 text-gray-900'
+                    isToday ? 'bg-blue-50 text-blue-600' : 
+                    isWeekend ? 'bg-gray-50 text-gray-500' : 'bg-white text-gray-700'
                   }`}
                 >
                   <div className="flex items-center justify-center space-x-1 text-sm">
@@ -817,7 +833,7 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
                       {format(day, 'dd')}
                     </span>
                     <span className="text-gray-400 text-xs">·</span>
-                    <span className="text-gray-600 text-xs">
+                    <span className="text-gray-500 text-xs">
                       {['一', '二', '三', '四', '五', '六', '日'][index]}
                     </span>
                   </div>
@@ -831,7 +847,7 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
             <div key={slot.id} className="grid border-b border-gray-200 min-h-24" style={{gridTemplateColumns: '100px repeat(7, 1fr)'}}>
               {/* 时间段标题 */}
               <div className={`p-2 ${slot.color} border-r border-gray-200 flex flex-col justify-center items-center`}>
-                <div className="font-medium text-gray-900 text-sm">{slot.name}</div>
+                <div className="font-medium text-gray-700 text-sm">{slot.name}</div>
               </div>
 
               {/* 每天的时间段 */}
@@ -845,15 +861,14 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
                   <div
                     key={`${dayKey}-${slot.id}`}
                     className={`p-2 border-l border-gray-200 space-y-1 min-h-24 overflow-hidden relative ${
-                      isWeekend ? 'bg-gray-25' : ''
+                      isWeekend ? 'bg-gray-50' : ''
                     } ${
-                      dragOverCell === `${dayKey}-${slot.id}` ? 'bg-blue-100 border-blue-400 border-2 border-dashed' : ''
+                      dragOverCell === `${dayKey}-${slot.id}` ? 'bg-blue-50 border-blue-300 border-2 border-dashed' : ''
                     } ${
                       draggedTask ? 'transition-all duration-200' : ''
                     } ${
                       draggedTask && dragOverCell !== `${dayKey}-${slot.id}` ? 'hover:bg-blue-50 hover:border-blue-200 hover:border-dashed' : ''
                     }`}
-                    style={isWeekend ? {backgroundColor: '#fafafa'} : {}}
                     onDragOver={(e) => handleDragOver(e, dayKey, slot.id)}
                     onDragLeave={handleDragLeave}
                     onDrop={(e) => handleDrop(e, dayKey, slot.id)}
@@ -862,7 +877,7 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
                     {dayTasks.map((task) => (
                       <div
                         key={task.id}
-                        className="text-xs p-2 bg-blue-100 text-blue-800 rounded border border-blue-200 cursor-pointer hover:bg-blue-200 transition-colors"
+                        className="text-xs p-2 bg-blue-50 text-blue-700 rounded border border-blue-200 cursor-pointer hover:bg-blue-100 transition-colors"
                         onClick={() => onUpdateTask(task.id, task)}
                       >
                         <div className="font-medium break-words overflow-hidden text-ellipsis" style={{display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical'}}>{task.title}</div>
@@ -970,8 +985,10 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
                               value={quickTask.time}
                               color={quickTask.color}
                               completed={quickTask.completed}
+                              estimatedTime={quickTask.estimatedTime}
                               onChange={(time) => updateQuickTask(dayKey, slot.id, index, 'time', time)}
                               onColorChange={(color) => updateQuickTask(dayKey, slot.id, index, 'color', color)}
+                              onEstimatedTimeChange={(hours) => updateQuickTask(dayKey, slot.id, index, 'estimatedTime', hours)}
                             />
                           </div>
                           
@@ -991,8 +1008,8 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
                               }}
                               className={`flex-1 text-xs p-1 border-none focus:outline-none bg-transparent resize-none overflow-hidden break-words ${
                                 (highlightedColor && quickTask.color === highlightedColor) 
-                                  ? 'text-gray-700' 
-                                  : (quickTask.completed ? 'line-through text-gray-500' : 'text-gray-700')
+                                  ? 'text-gray-900' 
+                                  : (quickTask.completed ? 'line-through text-gray-500' : 'text-gray-900')
                               }`}
                               onClick={(e) => e.stopPropagation()}
                               rows={1}
@@ -1034,7 +1051,7 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
             onClick={() => setCurrentWeek(subWeeks(currentWeek, 1))}
             title="上一周"
           >
-            <ChevronUp className="w-4 h-4 text-gray-400 group-hover:text-blue-600" />
+            <ChevronUp className="w-4 h-4 text-gray-500 group-hover:text-blue-600" />
           </div>
           {/* 下半部分 - 下一周 */}
           <div 
@@ -1042,7 +1059,7 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
             onClick={() => setCurrentWeek(addWeeks(currentWeek, 1))}
             title="下一周"
           >
-            <ChevronDown className="w-4 h-4 text-gray-400 group-hover:text-blue-600" />
+            <ChevronDown className="w-4 h-4 text-gray-500 group-hover:text-blue-600" />
           </div>
         </div>
       </div>
@@ -1061,7 +1078,7 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
         
         return (
           <div
-            className="time-tracking-popup fixed bg-white border border-gray-200 rounded shadow-lg p-2 z-[9999]"
+            className="time-tracking-popup fixed bg-white border border-gray-300 rounded shadow-xl p-2 z-[9999]"
             style={{
               left: `${x}px`,
               top: `${y}px`
@@ -1186,7 +1203,7 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
             
             {/* 显示当前累计时间 */}
             {getTaskTimeRecord(timeTrackingPopup.taskId) > 0 && (
-              <div className="mt-1 pt-1 border-t border-gray-200 text-xs text-gray-500 text-center">
+              <div className="mt-1 pt-1 border-t border-gray-200 text-xs text-gray-600 text-center">
                 {formatTimeRecord(getTaskTimeRecord(timeTrackingPopup.taskId))}
               </div>
             )}
@@ -1208,7 +1225,7 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
         
         return (
           <div
-            className="fixed bg-white border border-gray-200 rounded shadow-lg p-2 z-50"
+            className="fixed bg-white border border-gray-300 rounded shadow-xl p-2 z-50"
             style={{
               left: `${x}px`,
               top: `${y}px`
@@ -1218,7 +1235,7 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
           <div className="flex space-x-2">
             <button
               onClick={() => copyTask(taskActionPopup.dayKey, taskActionPopup.slotId, taskActionPopup.taskIndex)}
-              className="flex items-center space-x-1 px-2 py-1 text-xs bg-blue-50 text-blue-600 rounded hover:bg-blue-100 transition-colors"
+              className="flex items-center space-x-1 px-2 py-1 text-xs bg-blue-50 text-blue-600 rounded hover:bg-blue-100 transition-colors border border-blue-200"
             >
               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
@@ -1230,7 +1247,7 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
                 deleteQuickTask(taskActionPopup.dayKey, taskActionPopup.slotId, taskActionPopup.taskIndex);
                 setTaskActionPopup(null);
               }}
-              className="flex items-center space-x-1 px-2 py-1 text-xs bg-red-50 text-red-600 rounded hover:bg-red-100 transition-colors"
+              className="flex items-center space-x-1 px-2 py-1 text-xs bg-red-50 text-red-600 rounded hover:bg-red-100 transition-colors border border-red-200"
             >
               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -1250,84 +1267,109 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
         const allColors = new Set([...Object.keys(plannedColorStats), ...Object.keys(actualColorStats)]);
         const totalPlannedHours = Object.values(plannedColorStats).reduce((sum, hours) => sum + hours, 0);
         const totalActualHours = Object.values(actualColorStats).reduce((sum, hours) => sum + hours, 0);
-        const totalUsedHours = totalPlannedHours + totalActualHours;
+        
+        const colorNames = {
+          red: 'Meeting',
+          orange: 'Think', 
+          pink: 'Interview',
+          green: 'Swimming',
+          purple: 'Coach',
+          blue: 'English',
+          yellow: 'XinLi',
+          indigo: 'Book',
+          tencent: 'Free',
+          cyan: 'Relax'
+        };
         
         return (
           <div className="mt-4 bg-white rounded-lg shadow-sm border border-gray-200 p-4">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-medium text-gray-900">本周时间分配</h3>
               <div 
-                className="text-xs text-gray-500 cursor-pointer hover:text-blue-600 hover:underline"
+                className="text-xs text-gray-600 cursor-pointer hover:text-blue-600 hover:underline"
                 onClick={() => setIsTimeEditModalOpen(true)}
                 title="点击修改总工作时间"
               >
-                计划: {totalPlannedHours.toFixed(1)}h | 完成: {totalActualHours.toFixed(1)}h | 总计: {totalWorkingHours}h ({((totalUsedHours / totalWorkingHours) * 100).toFixed(1)}%)
+                计划: {totalPlannedHours.toFixed(1)}h | 完成: {totalActualHours.toFixed(1)}h | 总计: {totalWorkingHours}h | 差距: {(totalPlannedHours - totalActualHours).toFixed(1)}h
               </div>
             </div>
             
-            {/* 时间条 - 显示计划时间（透明）和实际时间（实色） */}
-            <div className="flex h-6 bg-gray-100 rounded overflow-hidden">
-              {Array.from(allColors).map(color => {
-                const plannedHours = plannedColorStats[color] || 0;
-                const actualHours = actualColorStats[color] || 0;
-                const totalColorHours = plannedHours + actualHours;
-                const percentage = (totalColorHours / totalWorkingHours) * 100;
-                const actualPercentage = (actualHours / totalWorkingHours) * 100;
-                const plannedPercentage = (plannedHours / totalWorkingHours) * 100;
-                
-                const colorClasses = getColorClasses(color || 'gray');
-                const colorNames = {
-                  red: 'Meeting',
-                  orange: 'Think', 
-                  pink: 'Interview',
-                  green: 'Run',
-                  purple: 'Coach',
-                  blue: 'English',
-                  yellow: 'XinLi',
-                  indigo: 'Book',
-                  tencent: 'Free'
-                };
-                
-                return (
+            {/* 第一行：计划时间（所有任务） */}
+            <div className="mb-2">
+              <div className="text-xs text-gray-500 mb-1">计划时间（所有任务，按预期时长统计）</div>
+              <div className="flex h-6 bg-gray-100 rounded overflow-hidden">
+                {Array.from(allColors).map(color => {
+                  const plannedHours = plannedColorStats[color] || 0;
+                  if (plannedHours === 0) return null;
+                  
+                  const percentage = (plannedHours / totalWorkingHours) * 100;
+                  const colorClasses = getColorClasses(color || 'gray');
+                  
+                  return (
+                    <div
+                      key={`planned-${color}`}
+                      className={`relative flex items-center justify-center text-white text-xs font-medium cursor-pointer hover:opacity-80 transition-opacity ${colorClasses.bg} opacity-60`}
+                      style={{ width: `${percentage}%` }}
+                      title={`${colorNames[color]}: 计划${plannedHours.toFixed(1)}h (${percentage.toFixed(1)}%)`}
+                      onMouseEnter={() => setHighlightedColor(color)}
+                      onMouseLeave={() => setHighlightedColor(null)}
+                    >
+                      <span className="relative z-10">
+                        {percentage >= 5 ? `${plannedHours.toFixed(1)}h` : ''}
+                      </span>
+                    </div>
+                  );
+                })}
+                {/* 剩余计划时间 */}
+                {totalPlannedHours < totalWorkingHours && (
                   <div
-                    key={color}
-                    className="relative flex items-center justify-center text-white text-xs font-medium cursor-pointer hover:opacity-80 transition-opacity"
-                    style={{ width: `${percentage}%` }}
-                    title={`${colorNames[color]}: 计划${plannedHours.toFixed(1)}h + 完成${actualHours.toFixed(1)}h = ${totalColorHours.toFixed(1)}h (${percentage.toFixed(1)}%)`}
-                    onMouseEnter={() => setHighlightedColor(color)}
-                    onMouseLeave={() => setHighlightedColor(null)}
+                    className="bg-gray-200 flex items-center justify-center text-gray-500 text-xs"
+                    style={{ width: `${((totalWorkingHours - totalPlannedHours) / totalWorkingHours) * 100}%` }}
+                    title={`剩余计划: ${(totalWorkingHours - totalPlannedHours).toFixed(1)}小时`}
                   >
-                    {/* 实际完成时间（实色） */}
-                    {actualHours > 0 && (
-                      <div
-                        className={`absolute left-0 top-0 h-full ${colorClasses.bg}`}
-                        style={{ width: `${(actualPercentage / percentage) * 100}%` }}
-                      ></div>
-                    )}
-                    {/* 计划时间（透明） */}
-                    {plannedHours > 0 && (
-                      <div
-                        className={`absolute right-0 top-0 h-full ${colorClasses.bg} opacity-40`}
-                        style={{ width: `${(plannedPercentage / percentage) * 100}%` }}
-                      ></div>
-                    )}
-                    {/* 文字显示 */}
-                    <span className="relative z-10">
-                      {percentage >= 5 ? `${totalColorHours.toFixed(1)}h` : ''}
-                    </span>
+                    {((totalWorkingHours - totalPlannedHours) / totalWorkingHours) >= 0.05 ? `${(totalWorkingHours - totalPlannedHours).toFixed(1)}h` : ''}
                   </div>
-                );
-              })}
-              {/* 剩余时间 */}
-              {totalUsedHours < totalWorkingHours && (
-                <div
-                  className="bg-gray-200 flex items-center justify-center text-gray-500 text-xs"
-                  style={{ width: `${((totalWorkingHours - totalUsedHours) / totalWorkingHours) * 100}%` }}
-                  title={`剩余: ${(totalWorkingHours - totalUsedHours).toFixed(1)}小时 (${((totalWorkingHours - totalUsedHours) / totalWorkingHours * 100).toFixed(1)}%)`}
-                >
-                  {((totalWorkingHours - totalUsedHours) / totalWorkingHours) >= 0.05 ? `${(totalWorkingHours - totalUsedHours).toFixed(1)}h` : ''}
-                </div>
-              )}
+                )}
+              </div>
+            </div>
+            
+            {/* 第二行：实际完成时间（仅已完成任务） */}
+            <div className="mb-2">
+              <div className="text-xs text-gray-500 mb-1">实际完成时间（仅已完成任务，按实际记录）</div>
+              <div className="flex h-6 bg-gray-100 rounded overflow-hidden">
+                {Array.from(allColors).map(color => {
+                  const actualHours = actualColorStats[color] || 0;
+                  if (actualHours === 0) return null;
+                  
+                  const percentage = (actualHours / totalWorkingHours) * 100;
+                  const colorClasses = getColorClasses(color || 'gray');
+                  
+                  return (
+                    <div
+                      key={`actual-${color}`}
+                      className={`relative flex items-center justify-center text-white text-xs font-medium cursor-pointer hover:opacity-80 transition-opacity ${colorClasses.bg}`}
+                      style={{ width: `${percentage}%` }}
+                      title={`${colorNames[color]}: 完成${actualHours.toFixed(1)}h (${percentage.toFixed(1)}%)`}
+                      onMouseEnter={() => setHighlightedColor(color)}
+                      onMouseLeave={() => setHighlightedColor(null)}
+                    >
+                      <span className="relative z-10">
+                        {percentage >= 5 ? `${actualHours.toFixed(1)}h` : ''}
+                      </span>
+                    </div>
+                  );
+                })}
+                {/* 剩余实际时间 */}
+                {totalActualHours < totalWorkingHours && (
+                  <div
+                    className="bg-gray-200 flex items-center justify-center text-gray-500 text-xs"
+                    style={{ width: `${((totalWorkingHours - totalActualHours) / totalWorkingHours) * 100}%` }}
+                    title={`剩余: ${(totalWorkingHours - totalActualHours).toFixed(1)}小时`}
+                  >
+                    {((totalWorkingHours - totalActualHours) / totalWorkingHours) >= 0.05 ? `${(totalWorkingHours - totalActualHours).toFixed(1)}h` : ''}
+                  </div>
+                )}
+              </div>
             </div>
             
             {/* 颜色图例 - 显示计划和实际时间 */}
@@ -1335,35 +1377,26 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
               {Array.from(allColors).map(color => {
                 const plannedHours = plannedColorStats[color] || 0;
                 const actualHours = actualColorStats[color] || 0;
-                const totalColorHours = plannedHours + actualHours;
-                const percentage = (totalColorHours / totalWorkingHours) * 100;
+                const gap = plannedHours - actualHours;
+                const percentage = (plannedHours / totalWorkingHours) * 100;
                 const colorClasses = getColorClasses(color);
-                const colorTextClasses = color ? colorClasses.text.replace('bg-', 'text-') : 'text-gray-600';
-                const colorNames = {
-                  red: 'Meeting',
-                  orange: 'Think', 
-                  pink: 'Interview',
-                  green: 'Run',
-                  purple: 'Coach',
-                  blue: 'English',
-                  yellow: 'XinLi',
-                  indigo: 'Book',
-                  tencent: 'Free'
-                };
+                const colorTextClasses = color ? colorClasses.text.replace('bg-', 'text-') : 'text-gray-400';
                 
                 return (
                   <div key={color} className="flex items-center space-x-1">
                     <div className="flex items-center">
                       <div className={`w-3 h-3 ${colorClasses.bg} rounded`}></div>
-                      {plannedHours > 0 && (
-                        <div className={`w-3 h-3 ${colorClasses.bg} opacity-40 rounded ml-0.5`}></div>
-                      )}
+                      <div className={`w-3 h-3 ${colorClasses.bg} opacity-40 rounded ml-0.5`}></div>
                     </div>
-                    <span className="text-gray-600">
+                    <span className="text-gray-700">
                       {colorNames[color]}: 
-                      {actualHours > 0 && <span className="font-medium"> 完成{actualHours.toFixed(1)}h</span>}
-                      {plannedHours > 0 && <span className="text-gray-500"> 计划{plannedHours.toFixed(1)}h</span>}
-                      <span className={`font-bold ${colorTextClasses}`}> ({percentage.toFixed(1)}%)</span>
+                      <span className="text-gray-600"> 计划{plannedHours.toFixed(1)}h</span>
+                      {actualHours > 0 && <span className="font-medium text-gray-900"> → 完成{actualHours.toFixed(1)}h</span>}
+                      {gap !== 0 && (
+                        <span className={gap > 0 ? 'text-orange-500' : 'text-emerald-600'}>
+                          {' '}({gap > 0 ? '+' : ''}{gap.toFixed(1)}h)
+                        </span>
+                      )}
                     </span>
                   </div>
                 );
@@ -1378,7 +1411,7 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
         <div className="fixed top-4 left-1/2 transform -translate-x-1/2 bg-blue-500 text-white px-4 py-2 rounded-lg text-sm z-50 shadow-lg flex items-center space-x-2">
           <span>🚀</span>
           <span>正在移动任务: {draggedTask.task.text || draggedTask.task.time || '未命名任务'}</span>
-          <span className="text-blue-200 text-xs">拖拽到目标时间段</span>
+          <span className="text-blue-100 text-xs">拖拽到目标时间段</span>
         </div>
       )}
 
