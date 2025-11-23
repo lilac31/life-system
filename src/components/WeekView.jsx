@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronUp, ChevronDown, Star, Cloud, CloudOff, AlertCircle } from 'lucide-react';
+import { ChevronUp, ChevronDown, Star, Cloud, CloudOff, AlertCircle, Settings, RefreshCw, Lightbulb } from 'lucide-react';
 import { format, startOfWeek, addDays, addWeeks, subWeeks, isSameDay } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 import TimeSelect from './TimeSelect';
@@ -11,7 +11,7 @@ import YearTimeline from './YearTimeline';
 import DataRecovery from './DataRecovery';
 import { useScheduleData } from '../hooks/useDataSync';
 
-const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange }) => {
+const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange, onShowSyncSettings, onManualSync, isSyncingManually }) => {
   const { data, saveData, saveDataWithImmediateSync, getWeekData, saveWeekData, isOnline, syncStatus, manualSync, lastSync } = useScheduleData();
   const [currentWeek, setCurrentWeek] = useState(new Date());
   const [isSyncing, setIsSyncing] = useState(false);
@@ -31,6 +31,7 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
   const [totalWorkingHours, setTotalWorkingHours] = useState(40); // 默认40小时
   const [highlightedColor, setHighlightedColor] = useState(null);
   const [showDataRecovery, setShowDataRecovery] = useState(false);
+  const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   
   // 获取当前周的关键词
   const getCurrentWeekKey = () => {
@@ -182,12 +183,25 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
       if (e.key === 'Escape') {
         setTaskActionPopup(null);
         setTimeTrackingPopup(null);
+        setShowSettingsMenu(false);
       }
     };
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, []);
+  
+  // 点击外部关闭设置菜单
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (showSettingsMenu && !e.target.closest('.settings-menu-container')) {
+        setShowSettingsMenu(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showSettingsMenu]);
 
   // 使用ref来跟踪鼠标是否在相关区域内
   const mouseTrackingRef = useRef(false);
@@ -758,6 +772,7 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
             handleDataImport(data);
             setShowDataRecovery(false);
           }}
+          onClose={() => setShowDataRecovery(false)}
         />
       )}
       {/* 应用头部 */}
@@ -770,57 +785,143 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
             </p>
           </div>
           
-          {/* 同步设置和数据管理入口 - 与标题同一行 */}
-          <div className="flex items-center space-x-2">
-            {/* 同步状态指示器 */}
-            <div className="flex items-center space-x-2">
-              {isOnline ? (
-                isSyncing ? (
-                  <div className="flex items-center space-x-1 text-blue-500">
-                    <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                    <span className="text-xs text-blue-500">同步中</span>
-                  </div>
-                ) : (
-                  <div className="flex items-center space-x-1 text-emerald-600">
-                    <Cloud className="w-4 h-4" />
-                    <span className="text-xs text-emerald-600">
-                      {lastSync ? `已同步 ${format(lastSync, 'HH:mm')}` : '已同步'}
-                    </span>
-                  </div>
-                )
-              ) : (
-                <div className="flex items-center space-x-1 text-gray-400">
-                  <CloudOff className="w-4 h-4" />
-                  <span className="text-xs text-gray-400">离线</span>
-                </div>
-              )}
-              {syncError && (
-                <div className="flex items-center space-x-1 text-red-500" title={syncError}>
-                  <AlertCircle className="w-4 h-4" />
-                </div>
-              )}
-            </div>
-            
-            <DataManager onImport={handleDataImport} />
-            <button
-              onClick={() => setShowDataRecovery(true)}
-              className="btn-secondary text-xs px-2 py-1 text-blue-600 hover:text-blue-700"
-              title="数据管理：备份、恢复、导入导出"
-            >
-              数据管理
-            </button>
-          </div>
+          {/* 导航栏 - 周视图/年视图 */}
+          <Navigation currentView={currentView} onViewChange={onViewChange} />
         </div>
         
-        <div className="flex items-center space-x-4">
-          {/* 导航栏 */}
-          <Navigation currentView={currentView} onViewChange={onViewChange} />
+        {/* 同步状态和设置按钮 - 标题右侧 */}
+        <div className="flex items-center space-x-2 relative settings-menu-container">
+          {/* 同步状态指示器 */}
+          <div className="flex items-center space-x-2">
+            {isOnline ? (
+              isSyncing ? (
+                <div className="flex items-center space-x-1 text-blue-500">
+                  <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                  <span className="text-xs text-blue-500">同步中</span>
+                </div>
+              ) : (
+                <div className="flex items-center space-x-1 text-emerald-600">
+                  <Cloud className="w-4 h-4" />
+                  <span className="text-xs text-emerald-600">
+                    {lastSync ? `已同步 ${format(lastSync, 'HH:mm')}` : '已同步'}
+                  </span>
+                </div>
+              )
+            ) : (
+              <div className="flex items-center space-x-1 text-gray-400">
+                <CloudOff className="w-4 h-4" />
+                <span className="text-xs text-gray-400">离线</span>
+              </div>
+            )}
+            {syncError && (
+              <div className="flex items-center space-x-1 text-red-500" title={syncError}>
+                <AlertCircle className="w-4 h-4" />
+              </div>
+            )}
+          </div>
+          
+          {/* 手动刷新同步按钮 */}
+          {isOnline && onManualSync && (
+            <button
+              onClick={onManualSync}
+              disabled={syncStatus === 'syncing' || isSyncingManually}
+              className={`p-2 rounded-full hover:bg-gray-100 transition-colors ${
+                syncStatus === 'syncing' || isSyncingManually ? 'opacity-50 cursor-not-allowed' : ''
+              }`}
+              title="手动刷新同步数据"
+            >
+              <RefreshCw 
+                className={`w-5 h-5 ${
+                  syncStatus === 'syncing' || isSyncingManually 
+                    ? 'animate-spin text-blue-500' 
+                    : 'text-gray-600'
+                }`}
+              />
+            </button>
+          )}
+          
+          {/* 设置按钮 */}
           <button
-            onClick={() => setCurrentWeek(new Date())}
-            className="btn-secondary text-xs px-2 py-1"
+            onClick={() => setShowSettingsMenu(!showSettingsMenu)}
+            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+            title="设置"
           >
-            本周
+            <Settings className="w-5 h-5 text-gray-600" />
           </button>
+          
+          {/* 思考本按钮 */}
+          <button
+            onClick={() => onViewChange('thinking')}
+            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+            title="思考本"
+          >
+            <Lightbulb className="w-5 h-5 text-amber-500" />
+          </button>
+          
+          {/* 设置菜单 */}
+          {showSettingsMenu && (
+            <div className="absolute right-0 top-10 bg-white rounded-lg shadow-xl border border-gray-200 py-2 z-50 min-w-[200px]">
+              <button
+                onClick={() => {
+                  setCurrentWeek(new Date());
+                  setShowSettingsMenu(false);
+                }}
+                className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center space-x-2"
+              >
+                <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <span className="text-sm">本周</span>
+              </button>
+              
+              <button
+                onClick={() => {
+                  setIsTimeEditModalOpen(true);
+                  setShowSettingsMenu(false);
+                }}
+                className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center space-x-2"
+              >
+                <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="text-sm">设置工作时间</span>
+              </button>
+              
+              <div className="border-t border-gray-200 my-2"></div>
+              
+              <button
+                onClick={() => {
+                  if (onShowSyncSettings) {
+                    onShowSyncSettings();
+                  }
+                  setShowSettingsMenu(false);
+                  setTimeTrackingPopup(null); // 关闭时间记录弹窗
+                }}
+                className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center space-x-2"
+              >
+                <Cloud className="w-4 h-4 text-gray-600" />
+                <span className="text-sm">同步设置</span>
+              </button>
+              
+              <button
+                onClick={() => {
+                  setShowDataRecovery(true);
+                  setShowSettingsMenu(false);
+                  setTimeTrackingPopup(null); // 关闭时间记录弹窗
+                }}
+                className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center space-x-2"
+              >
+                <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+                </svg>
+                <span className="text-sm">数据管理</span>
+              </button>
+              
+              <div className="px-4 py-2">
+                <DataManager onImport={handleDataImport} />
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1079,7 +1180,7 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
                         )}
                           
                           {/* 时间选择器区域 */}
-                          <div className="flex-shrink-0" style={{ position: 'relative', zIndex: 999998 }} onDragStart={(e) => e.preventDefault()}>
+                          <div className="flex-shrink-0" style={{ position: 'relative', zIndex: 8500 }} onDragStart={(e) => e.preventDefault()}>
                             <TimeSelect
                               value={quickTask.time}
                               color={quickTask.color}
@@ -1183,7 +1284,7 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange })
             style={{
               left: `${x}px`,
               top: `${y}px`,
-              zIndex: 2147483647
+              zIndex: 8000
             }}
             onMouseEnter={() => {
               // 鼠标进入弹窗时，清除关闭定时器

@@ -3,6 +3,8 @@ import TestPage from './TestPage';
 import WeekView from './components/WeekView';
 import YearView from './components/YearView';
 import ManagementView from './components/ManagementView';
+import ThinkingTools from './components/ThinkingTools';
+import LifeTimeline from './components/LifeTimeline';
 import AddTaskModal from './components/AddTaskModal';
 import SyncStatus from './components/SyncStatus';
 import SyncSettings from './components/SyncSettings';
@@ -79,7 +81,7 @@ function App() {
     // 如果没有API密钥且没有跳过设置，显示设置界面
     if (!hasApiKey && !hasSkippedSync) {
       console.log('未设置 JSONBin API密钥，显示设置界面');
-      setShowSyncSettings(true);
+      // setShowSyncSettings(true);
     } else if (hasApiKey) {
       console.log('已设置 JSONBin API密钥，获取用户信息并尝试自动同步');
       // 确保获取用户信息后再尝试自动同步
@@ -117,7 +119,7 @@ function App() {
   // 监听显示云同步设置的事件
   useEffect(() => {
     const handleShowCloudSetup = () => {
-      setShowSyncSettings(true);
+      // setShowSyncSettings(true);
     };
 
     window.addEventListener('show-cloud-setup', handleShowCloudSetup);
@@ -164,12 +166,19 @@ function App() {
             onUpdateTask={updateTask}
             currentView={currentView}
             onViewChange={setCurrentView}
+            onShowSyncSettings={() => setShowSyncSettings(true)}
+            onManualSync={handleManualSync}
+            isSyncingManually={isSyncingManually}
           />
         );
       case 'year':
         return <YearView key={dataUpdateKey} currentView={currentView} onViewChange={setCurrentView} />;
       case 'management':
         return <ManagementView key={dataUpdateKey} currentView={currentView} onViewChange={setCurrentView} />;
+      case 'thinking':
+        return <ThinkingTools key={dataUpdateKey} onBack={() => setCurrentView('week')} />;
+      case 'life':
+        return <LifeTimeline key={dataUpdateKey} onBack={() => setCurrentView('week')} />;
       default:
         return (
           <WeekView
@@ -179,6 +188,9 @@ function App() {
             onUpdateTask={updateTask}
             currentView={currentView}
             onViewChange={setCurrentView}
+            onShowSyncSettings={() => setShowSyncSettings(true)}
+            onManualSync={handleManualSync}
+            isSyncingManually={isSyncingManually}
           />
         );
     }
@@ -187,49 +199,6 @@ function App() {
   return (
     <>
       <div className="min-h-screen bg-gray-50">
-        <header className="bg-white shadow-sm border-b border-gray-200 px-4 py-2">
-          <div className="flex items-center justify-between">
-            <h1 className="text-xl font-bold text-gray-800"></h1>
-            <div className="flex items-center gap-2">
-              {/* 手动刷新同步按钮 */}
-              {isOnline && (
-                <button
-                  onClick={handleManualSync}
-                  disabled={syncStatus === 'syncing' || isSyncingManually}
-                  className={`p-2 rounded hover:bg-gray-100 transition-colors ${
-                    syncStatus === 'syncing' || isSyncingManually ? 'opacity-50 cursor-not-allowed' : ''
-                  }`}
-                  title="手动刷新同步数据"
-                >
-                  <RefreshCw 
-                    size={18} 
-                    className={`${
-                      syncStatus === 'syncing' || isSyncingManually 
-                        ? 'animate-spin text-blue-500' 
-                        : 'text-gray-600 hover:text-purple-600'
-                    }`}
-                  />
-                </button>
-              )}
-              <button
-                onClick={() => setShowSyncSettings(true)}
-                className="px-3 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 text-sm flex items-center gap-1"
-                title="同步设置 (API Key + 用户ID)"
-              >
-                🔧 同步设置
-              </button>
-              <button
-                onClick={() => setShowImportExport(true)}
-                className="px-3 py-2 bg-indigo-500 text-white rounded hover:bg-indigo-600 text-sm flex items-center gap-1"
-                title="导入/导出数据 (Ctrl+Shift+E)"
-              >
-                📦 数据
-              </button>
-              {/* <SyncStatus /> */}
-            </div>
-          </div>
-        </header>
-        
         <main className="p-3">
           <div className="w-full max-w-full mx-auto px-4">
             {renderCurrentView()}

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { RefreshCw, AlertTriangle, CheckCircle, Download, Upload, FileText, Clock } from 'lucide-react';
+import { RefreshCw, AlertTriangle, CheckCircle, Download, Upload, FileText, Clock, X } from 'lucide-react';
 
-const DataRecovery = ({ onRecover }) => {
+const DataRecovery = ({ onRecover, onClose }) => {
   const [recoveryStatus, setRecoveryStatus] = useState('checking');
   const [availableData, setAvailableData] = useState({});
   const [showDetails, setShowDetails] = useState(false);
@@ -146,11 +146,20 @@ const DataRecovery = ({ onRecover }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center space-x-2 mb-4">
-          <FileText className="w-5 h-5 text-blue-500" />
-          <h3 className="text-lg font-medium text-gray-900">数据管理中心</h3>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[10000]">
+      <div className="bg-white rounded-lg p-6 max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto relative">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center space-x-2">
+            <FileText className="w-5 h-5 text-blue-500" />
+            <h3 className="text-lg font-medium text-gray-900">数据管理中心</h3>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1 hover:bg-gray-100 rounded-full transition-colors"
+            title="关闭"
+          >
+            <X className="w-5 h-5 text-gray-500" />
+          </button>
         </div>
 
         {recoveryStatus === 'checking' && (

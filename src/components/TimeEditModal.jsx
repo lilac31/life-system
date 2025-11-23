@@ -31,7 +31,7 @@ const TimeEditModal = ({ isOpen, onClose, totalTime, onSave }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[10000]">
       <div className="bg-white rounded-lg shadow-xl p-6 w-80">
         <h3 className="text-lg font-medium text-gray-900 mb-4">修改每周工作时间</h3>
         

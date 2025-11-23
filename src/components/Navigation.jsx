@@ -4,7 +4,8 @@ const Navigation = ({ currentView, onViewChange }) => {
   const views = [
     { id: 'week', name: '周视图' },
     { id: 'year', name: '年视图' },
-    { id: 'management', name: '管理界面' }
+    { id: 'management', name: '管理界面' },
+    { id: 'life', name: '人生' }
   ];
 
   return (
