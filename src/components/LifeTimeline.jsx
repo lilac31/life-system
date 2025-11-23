@@ -365,8 +365,8 @@ const LifeTimeline = ({ onBack }) => {
             return (
               <div
                 key={category.id}
-                className={`border-b px-2 py-2 ${colorClasses.cellBg}`}
-                style={{ height: moduleHeight }}
+                className={`border-b px-2 py-2 ${colorClasses.cellBg} flex flex-col`}
+                style={{ minHeight: moduleHeight }}
               >
                 <div className="flex items-center justify-between mb-2 gap-1">
                   <input
@@ -477,17 +477,18 @@ const LifeTimeline = ({ onBack }) => {
                   return (
                     <div
                       key={category.id}
-                      className="flex items-center border-b bg-gray-50/50"
-                      style={{ height: moduleHeight }}
+                      className="flex items-start border-b bg-gray-50/50"
                     >
-                      <div className="flex w-full h-full">
+                      <div className="flex w-full"
+                        style={{ minHeight: moduleHeight }}
+                      >
                         {timeGroups.map((group, idx) => {
                           const groupKey = `${category.id}_${group.start}_${group.end}`;
                           const tasks = getCellTasks(groupKey);
                           return (
                             <div
                               key={`${category.id}-${idx}`}
-                              className={`flex-shrink-0 ${getGroupWidth()} p-2 border-r border-gray-200/40`}
+                              className={`flex-shrink-0 ${getGroupWidth()} p-2 border-r border-gray-200/40 flex flex-col justify-start`}
                               onDragOver={handleDragOver}
                               onDrop={(e) => handleDrop(e, category.id, groupKey, idx)}
                             >
@@ -520,7 +521,7 @@ const LifeTimeline = ({ onBack }) => {
                                               e.target.value
                                             )
                                           }
-                                          className={`w-full text-[11px] rounded-md px-2 py-1 border ${colorClasses.border} bg-white/80 focus:outline-none focus:border-blue-400 placeholder:text-gray-300 resize-none overflow-hidden ${
+                                          className={`w-full text-[11px] rounded-md px-2 py-1 border ${colorClasses.border} bg-white/80 focus:outline-none focus:border-blue-400 placeholder:text-gray-300 resize-none ${
                                             hasContent ? 'pr-6' : ''
                                           }`}
                                           placeholder={
@@ -531,7 +532,8 @@ const LifeTimeline = ({ onBack }) => {
                                           rows={1}
                                           style={{
                                             minHeight: '24px',
-                                            height: 'auto'
+                                            height: 'auto',
+                                            overflow: 'hidden'
                                           }}
                                           onInput={(e) => adjustTextareaHeight(e.target)}
                                         />
