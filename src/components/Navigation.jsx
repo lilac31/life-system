@@ -6,7 +6,8 @@ const Navigation = ({ currentView, onViewChange }) => {
     { id: 'week', name: '周视图' },
     { id: 'year', name: '年视图' },
     { id: 'management', name: '管理界面' },
-    { id: 'life', name: '人生', externalLink: 'https://z28332x6mn.feishu.cn/wiki/Styiw1ghri3ufxk0KdscaHYcnWf?fromScene=spaceOverview' }
+    { id: 'life', name: '人生', externalLink: 'https://z28332x6mn.feishu.cn/wiki/Styiw1ghri3ufxk0KdscaHYcnWf?fromScene=spaceOverview' },
+    { id: 'growth', name: '成长计划' }
   ];
 
   return (

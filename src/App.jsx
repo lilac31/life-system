@@ -5,6 +5,7 @@ import YearView from './components/YearView';
 import ManagementView from './components/ManagementView';
 import ThinkingTools from './components/ThinkingTools';
 import LifeTimeline from './components/LifeTimeline';
+import GrowthPlan from './components/GrowthPlan';
 import AddTaskModal from './components/AddTaskModal';
 import SyncStatus from './components/SyncStatus';
 import SyncSettings from './components/SyncSettings';
@@ -179,6 +180,8 @@ function App() {
         return <ThinkingTools key={dataUpdateKey} onBack={() => setCurrentView('week')} />;
       case 'life':
         return <LifeTimeline key={dataUpdateKey} onBack={() => setCurrentView('week')} />;
+      case 'growth':
+        return <GrowthPlan key={dataUpdateKey} />;
       default:
         return (
           <WeekView
