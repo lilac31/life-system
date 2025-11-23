@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, ArrowLeft } from 'lucide-react';
+import { Plus, ArrowLeft, X, GripVertical } from 'lucide-react';
 
 const LifeTimeline = ({ onBack }) => {
   const [zoomLevel, setZoomLevel] = useState(5); // 1, 3, 5, 10 years
@@ -11,6 +11,7 @@ const LifeTimeline = ({ onBack }) => {
     { id: 'share', name: '分享卡', goals: [{ id: 'g5', text: '撰写一本关于...的书', color: 'purple' }] },
   ]);
   const [timelineTasks, setTimelineTasks] = useState({});
+  const [draggedTask, setDraggedTask] = useState(null);
   const timelineScrollRef = useRef(null);
   const mainContentScrollRef = useRef(null);
 
@@ -72,6 +73,26 @@ const LifeTimeline = ({ onBack }) => {
     });
   };
 
+  const handleDeleteCategory = (categoryId) => {
+    setCategories(prev => prev.filter(cat => cat.id !== categoryId));
+    // 同时删除该模块的所有任务
+    setTimelineTasks(prev => {
+      const newTasks = { ...prev };
+      Object.keys(newTasks).forEach(key => {
+        if (key.startsWith(`${categoryId}_`)) {
+          delete newTasks[key];
+        }
+      });
+      return newTasks;
+    });
+  };
+
+  const handleCategoryNameChange = (categoryId, name) => {
+    setCategories(prev => prev.map(cat => 
+      cat.id === categoryId ? { ...cat, name } : cat
+    ));
+  };
+
   const handleAddGoal = (categoryId) => {
     setCategories(prev => prev.map(cat => {
       if (cat.id !== categoryId) return cat;
@@ -80,6 +101,18 @@ const LifeTimeline = ({ onBack }) => {
       return {
         ...cat,
         goals: [...cat.goals, { id: newGoalId, text: '新的目标', color: defaultColor }],
+      };
+    }));
+  };
+
+  const handleDeleteGoal = (categoryId, goalId) => {
+    setCategories(prev => prev.map(cat => {
+      if (cat.id !== categoryId) return cat;
+      // 至少保留一个目标
+      if (cat.goals.length <= 1) return cat;
+      return {
+        ...cat,
+        goals: cat.goals.filter(goal => goal.id !== goalId),
       };
     }));
   };
@@ -111,12 +144,14 @@ const LifeTimeline = ({ onBack }) => {
 
   const handleTaskChange = (categoryId, groupKey, taskIndex, text) => {
     setTimelineTasks(prev => {
-      const existing = prev[groupKey] || [''];
-      const next = existing.map((item, idx) => (idx === taskIndex ? text : item));
+      const existing = prev[groupKey] || [{ id: Date.now(), text: '', spans: 1 }];
+      const next = existing.map((item, idx) => 
+        idx === taskIndex ? { ...item, text } : item
+      );
 
       // 如果编辑的是最后一个且有内容，自动增加一个空行
       if (taskIndex === next.length - 1 && text.trim() !== '') {
-        next.push('');
+        next.push({ id: Date.now() + 1, text: '', spans: 1 });
       }
 
       return {
@@ -126,10 +161,93 @@ const LifeTimeline = ({ onBack }) => {
     });
   };
 
+  const handleDeleteTask = (groupKey, taskIndex) => {
+    setTimelineTasks(prev => {
+      const existing = prev[groupKey] || [];
+      const filtered = existing.filter((_, idx) => idx !== taskIndex);
+      
+      // 保证至少有一个空任务
+      if (filtered.length === 0 || filtered.every(t => t.text.trim() === '')) {
+        return {
+          ...prev,
+          [groupKey]: [{ id: Date.now(), text: '', spans: 1 }],
+        };
+      }
+
+      return {
+        ...prev,
+        [groupKey]: filtered,
+      };
+    });
+  };
+
   const getCellTasks = (groupKey) => {
     const tasks = timelineTasks[groupKey];
-    if (!tasks || tasks.length === 0) return [''];
+    if (!tasks || tasks.length === 0) return [{ id: Date.now(), text: '', spans: 1 }];
     return tasks;
+  };
+
+  const handleDragStart = (e, categoryId, groupKey, taskIndex, task) => {
+    setDraggedTask({ categoryId, groupKey, taskIndex, task });
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e, targetCategoryId, targetGroupKey, targetGroupIndex) => {
+    e.preventDefault();
+    if (!draggedTask) return;
+
+    const { categoryId, groupKey, taskIndex, task } = draggedTask;
+
+    // 只允许在同一个模块内拖动
+    if (categoryId !== targetCategoryId) {
+      setDraggedTask(null);
+      return;
+    }
+
+    // 计算跨越的时间段数量
+    const sourceGroupIndex = timeGroups.findIndex(g => 
+      `${categoryId}_${g.start}_${g.end}` === groupKey
+    );
+    
+    if (sourceGroupIndex === -1 || targetGroupIndex === -1) {
+      setDraggedTask(null);
+      return;
+    }
+
+    const spans = Math.abs(targetGroupIndex - sourceGroupIndex) + 1;
+    const startGroupIndex = Math.min(sourceGroupIndex, targetGroupIndex);
+    const startGroup = timeGroups[startGroupIndex];
+    const newGroupKey = `${categoryId}_${startGroup.start}_${startGroup.end}`;
+
+    setTimelineTasks(prev => {
+      // 从原位置删除
+      const sourceTasks = prev[groupKey] || [];
+      const filteredSource = sourceTasks.filter((_, idx) => idx !== taskIndex);
+      
+      // 添加到新位置
+      const targetTasks = prev[newGroupKey] || [{ id: Date.now(), text: '', spans: 1 }];
+      const newTask = { ...task, spans };
+      
+      // 如果目标位置只有一个空任务，替换它
+      const updatedTarget = targetTasks.length === 1 && targetTasks[0].text === ''
+        ? [newTask, { id: Date.now() + 1, text: '', spans: 1 }]
+        : [...targetTasks.filter(t => t.text.trim() !== ''), newTask, { id: Date.now() + 1, text: '', spans: 1 }];
+
+      return {
+        ...prev,
+        [groupKey]: filteredSource.length === 0 
+          ? [{ id: Date.now() + 2, text: '', spans: 1 }] 
+          : filteredSource,
+        [newGroupKey]: updatedTarget,
+      };
+    });
+
+    setDraggedTask(null);
   };
 
   const handleScroll = (source) => {
@@ -212,59 +330,88 @@ const LifeTimeline = ({ onBack }) => {
       <div className="flex-grow flex overflow-hidden">
         {/* Sidebar - Categories */}
         <aside className="flex-shrink-0 w-48 bg-white border-r overflow-y-auto">
-          <div className="h-12 border-b flex items-center justify-center font-semibold text-gray-700">分类</div>
+          <div className="h-14 border-b flex items-center justify-between px-3">
+            <span className="font-semibold text-gray-700">分类</span>
+            <button
+              type="button"
+              onClick={handleAddCategory}
+              className="p-1 hover:bg-gray-100 rounded-full text-gray-500"
+              title="新增模块"
+            >
+              <Plus size={16} />
+            </button>
+          </div>
           {categories.map(category => {
             const baseColor = category.goals[0]?.color || 'blue';
             const colorClasses = getGoalColorClasses(baseColor);
+            // 动态计算高度：基础高度 + 每个目标的高度
+            const baseHeight = 34; // 标题的高度
+            const goalHeight = 28; // 每个目标卡片的高度（包括间距）
+            const moduleHeight = baseHeight + (category.goals.length * goalHeight);
             return (
               <div
                 key={category.id}
-                className={`border-b px-3 flex flex-col justify-center ${colorClasses.cellBg}`}
-                style={{ height: 96 }}
+                className={`border-b px-2 py-2 ${colorClasses.cellBg}`}
+                style={{ height: moduleHeight }}
               >
-                <div className="font-bold text-sm text-gray-800 flex items-center justify-between">
-                  <span>{category.name}</span>
-                  <button
-                    type="button"
-                    onClick={() => handleAddGoal(category.id)}
-                    className="p-1 hover:bg-gray-100 rounded-full text-gray-500"
-                  >
-                    <Plus size={14} />
-                  </button>
+                <div className="flex items-center justify-between mb-2 gap-1">
+                  <input
+                    value={category.name}
+                    onChange={(e) => handleCategoryNameChange(category.id, e.target.value)}
+                    className="flex-1 bg-transparent border-none focus:outline-none font-bold text-sm min-w-0"
+                    placeholder="模块名称"
+                  />
+                  <div className="flex items-center gap-0.5 flex-shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleAddGoal(category.id)}
+                      className="p-0.5 hover:bg-white rounded text-gray-700 border border-transparent hover:border-gray-300 flex-shrink-0"
+                      title="添加目标"
+                    >
+                      <Plus size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteCategory(category.id)}
+                      className="p-0.5 hover:bg-white rounded text-gray-500 border border-transparent hover:border-red-300 hover:text-red-500 flex-shrink-0"
+                      title="删除模块"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
                 </div>
-                <div className="mt-1 text-[11px] text-gray-500">点击添加大目标</div>
-                <div className="mt-1 space-y-1">
+                <div className="space-y-1">
                   {category.goals.map(goal => (
                     <div
                       key={goal.id}
-                      className={`flex items-center text-xs bg-white px-1.5 py-1 rounded border ${colorClasses.border}`}
+                      className={`flex items-center text-xs bg-white px-1.5 py-0.5 rounded border ${colorClasses.border}`}
                     >
                       <button
                         type="button"
                         onClick={() => handleGoalColorChange(category.id, goal.id)}
-                        className={`w-3 h-3 rounded-full mr-2 ${colorClasses.tagBg}`}
+                        className={`w-3 h-3 rounded-full mr-1.5 flex-shrink-0 ${colorClasses.tagBg}`}
                         title="点击切换颜色"
                       />
                       <input
                         value={goal.text}
                         onChange={(e) => handleGoalTextChange(category.id, goal.id, e.target.value)}
-                        className="flex-grow bg-transparent border-none focus:outline-none text-gray-800 text-[12px]"
-                        placeholder="给这个模块起个名字"
+                        className="flex-1 bg-transparent border-none focus:outline-none text-gray-800 text-[11px] min-w-0"
+                        placeholder="目标名称"
                       />
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteGoal(category.id, goal.id)}
+                        className="p-0.5 hover:bg-red-100 rounded-full text-red-400 flex-shrink-0 opacity-0 hover:opacity-100"
+                        title="删除目标"
+                      >
+                        <X size={10} />
+                      </button>
                     </div>
                   ))}
                 </div>
               </div>
             );
           })}
-          <button
-            type="button"
-            onClick={handleAddCategory}
-            className="m-3 mt-2 flex items-center justify-center rounded-lg border border-dashed border-gray-300 py-1.5 text-xs text-gray-500 hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50/50"
-          >
-            <span className="mr-1 text-base">＋</span>
-            新增模块
-          </button>
         </aside>
 
         {/* Timeline & Grid */}
@@ -309,10 +456,15 @@ const LifeTimeline = ({ onBack }) => {
                 {categories.map(category => {
                   const baseColor = category.goals[0]?.color || 'blue';
                   const colorClasses = getGoalColorClasses(baseColor);
+                  // 右侧时间块高度要和左侧模块高度一致
+                  const baseHeight = 34;
+                  const goalHeight = 28;
+                  const moduleHeight = baseHeight + (category.goals.length * goalHeight);
                   return (
                     <div
                       key={category.id}
-                      className="h-24 flex items-center border-b bg-gray-50/50"
+                      className="flex items-center border-b bg-gray-50/50"
+                      style={{ height: moduleHeight }}
                     >
                       <div className="flex w-full h-full">
                         {timeGroups.map((group, idx) => {
@@ -322,28 +474,71 @@ const LifeTimeline = ({ onBack }) => {
                             <div
                               key={`${category.id}-${idx}`}
                               className={`flex-shrink-0 ${getGroupWidth()} p-2 border-r border-gray-200/40`}
+                              onDragOver={handleDragOver}
+                              onDrop={(e) => handleDrop(e, category.id, groupKey, idx)}
                             >
                               <div className="space-y-1">
-                                {tasks.map((taskText, taskIndex) => (
-                                  <input
-                                    key={`${groupKey}-${taskIndex}`}
-                                    value={taskText}
-                                    onChange={(e) =>
-                                      handleTaskChange(
-                                        category.id,
-                                        groupKey,
-                                        taskIndex,
-                                        e.target.value
-                                      )
-                                    }
-                                    className={`w-full text-[11px] rounded-md px-2 py-1 border ${colorClasses.border} bg-white/80 focus:outline-none focus:border-blue-400 placeholder:text-gray-300`}
-                                    placeholder={
-                                      taskIndex === 0
-                                        ? `${group.label}岁要做的事...`
-                                        : '继续添加...'
-                                    }
-                                  />
-                                ))}
+                                {tasks.map((task, taskIndex) => {
+                                  const hasContent = task.text && task.text.trim() !== '';
+                                  return (
+                                    <div
+                                      key={task.id || `${groupKey}-${taskIndex}`}
+                                      className="group relative flex items-center gap-1"
+                                    >
+                                      {hasContent && (
+                                        <div
+                                          className="cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                                          title="拖动调整时间跨度"
+                                          draggable
+                                          onDragStart={(e) => handleDragStart(e, category.id, groupKey, taskIndex, task)}
+                                        >
+                                          <GripVertical className="w-3 h-3 text-gray-400" />
+                                        </div>
+                                      )}
+                                      <div className="flex-1 relative">
+                                        <input
+                                          value={task.text || ''}
+                                          onChange={(e) =>
+                                            handleTaskChange(
+                                              category.id,
+                                              groupKey,
+                                              taskIndex,
+                                              e.target.value
+                                            )
+                                          }
+                                          className={`w-full text-[11px] rounded-md px-2 py-1 border ${colorClasses.border} bg-white/80 focus:outline-none focus:border-blue-400 placeholder:text-gray-300 ${
+                                            hasContent ? 'pr-6' : ''
+                                          }`}
+                                          placeholder={
+                                            taskIndex === 0
+                                              ? `${group.label}岁要做的事...`
+                                              : '继续添加...'
+                                          }
+                                        />
+                                        {hasContent && (
+                                          <button
+                                            type="button"
+                                            onClick={() => handleDeleteTask(groupKey, taskIndex)}
+                                            className="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-red-100 text-red-500 transition-opacity"
+                                            title="删除任务"
+                                          >
+                                            <X className="w-3 h-3" />
+                                          </button>
+                                        )}
+                                      </div>
+                                      {task.spans > 1 && hasContent && (
+                                        <div className="absolute top-0 left-0 right-0 bottom-0 pointer-events-none">
+                                          <div
+                                            className={`absolute top-0 bottom-0 left-0 ${colorClasses.cellBg} opacity-30 border-l-2 ${colorClasses.border}`}
+                                            style={{
+                                              width: `calc(${task.spans * 100}% + ${(task.spans - 1) * 8}px)`,
+                                            }}
+                                          />
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
                               </div>
                             </div>
                           );
