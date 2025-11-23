@@ -15,6 +15,20 @@ const LifeTimeline = ({ onBack }) => {
   const timelineScrollRef = useRef(null);
   const mainContentScrollRef = useRef(null);
 
+  // 自动调整 textarea 高度的函数
+  const adjustTextareaHeight = (textarea) => {
+    if (textarea) {
+      textarea.style.height = 'auto';
+      textarea.style.height = Math.max(24, textarea.scrollHeight) + 'px';
+    }
+  };
+
+  // 在组件挂载和任务更新时调整所有 textarea 高度
+  useEffect(() => {
+    const textareas = document.querySelectorAll('textarea');
+    textareas.forEach(adjustTextareaHeight);
+  }, [timelineTasks]);
+
   const currentAge = 31;
   const maxAge = 100;
   const currentYear = new Date().getFullYear();
@@ -496,7 +510,7 @@ const LifeTimeline = ({ onBack }) => {
                                         </div>
                                       )}
                                       <div className="flex-1 relative">
-                                        <input
+                                        <textarea
                                           value={task.text || ''}
                                           onChange={(e) =>
                                             handleTaskChange(
@@ -506,7 +520,7 @@ const LifeTimeline = ({ onBack }) => {
                                               e.target.value
                                             )
                                           }
-                                          className={`w-full text-[11px] rounded-md px-2 py-1 border ${colorClasses.border} bg-white/80 focus:outline-none focus:border-blue-400 placeholder:text-gray-300 ${
+                                          className={`w-full text-[11px] rounded-md px-2 py-1 border ${colorClasses.border} bg-white/80 focus:outline-none focus:border-blue-400 placeholder:text-gray-300 resize-none overflow-hidden ${
                                             hasContent ? 'pr-6' : ''
                                           }`}
                                           placeholder={
@@ -514,6 +528,12 @@ const LifeTimeline = ({ onBack }) => {
                                               ? `${group.label}岁要做的事...`
                                               : '继续添加...'
                                           }
+                                          rows={1}
+                                          style={{
+                                            minHeight: '24px',
+                                            height: 'auto'
+                                          }}
+                                          onInput={(e) => adjustTextareaHeight(e.target)}
                                         />
                                         {hasContent && (
                                           <button
