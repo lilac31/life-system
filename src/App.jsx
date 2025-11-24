@@ -5,6 +5,9 @@ import YearView from './components/YearView';
 import ManagementView from './components/ManagementView';
 import ThinkingTools from './components/ThinkingTools';
 import LifeTimeline from './components/LifeTimeline';
+import EnglishLearning from './components/EnglishLearning';
+import PersonalDashboard from './components/PersonalDashboard';
+import PsychologyStudy from './components/PsychologyStudy';
 
 import AddTaskModal from './components/AddTaskModal';
 import SyncStatus from './components/SyncStatus';
@@ -180,6 +183,12 @@ function App() {
         return <ThinkingTools key={dataUpdateKey} onBack={() => setCurrentView('week')} />;
       case 'life':
         return <LifeTimeline key={dataUpdateKey} onBack={() => setCurrentView('week')} />;
+      case 'e':
+        return <EnglishLearning key={dataUpdateKey} onBack={() => setCurrentView('week')} />;
+      case 'x':
+        return <PsychologyStudy key={dataUpdateKey} onBack={() => setCurrentView('week')} />;
+      case 'y':
+        return <PersonalDashboard key={dataUpdateKey} onBack={() => setCurrentView('week')} />;
       default:
         return (
           <WeekView
