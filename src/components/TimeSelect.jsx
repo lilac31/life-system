@@ -66,13 +66,13 @@ const TimeSelect = ({ value, color, completed = false, estimatedTime, onChange, 
           // 根据时间段确定默认时间
           let defaultTime = '10:00'; // 默认值
           if (slotId === 'morning') {
-            defaultTime = '09:00';
+            defaultTime = '10:00';
           } else if (slotId === 'noon') {
-            defaultTime = '12:00';
+            defaultTime = '13:00';
           } else if (slotId === 'afternoon') {
-            defaultTime = '14:00';
+            defaultTime = '15:00';
           } else if (slotId === 'evening') {
-            defaultTime = '18:00';
+            defaultTime = '19:00';
           }
           
           const targetButton = dropdownRef.current.querySelector(`button[data-time="${defaultTime}"]`);
@@ -172,16 +172,16 @@ const TimeSelect = ({ value, color, completed = false, estimatedTime, onChange, 
                   window.innerWidth - 100
                 )
               ) : 'auto',
-            zIndex: 9000,
+            zIndex: 10001,
             backgroundColor: '#ffffff',
             opacity: 1,
             position: 'fixed'
           }}
         >
           {/* 上半部分：颜色和时间选择 */}
-          <div className="flex" style={{ backgroundColor: '#ffffff', position: 'relative', zIndex: 9000 }}>
+          <div className="flex" style={{ backgroundColor: '#ffffff', position: 'relative', zIndex: 10001 }}>
             {/* 颜色选择区域 */}
-            <div className="w-20 p-2 border-r border-gray-200" style={{ backgroundColor: '#ffffff', position: 'relative', zIndex: 9000 }}>
+            <div className="w-20 p-2 border-r border-gray-200" style={{ backgroundColor: '#ffffff', position: 'relative', zIndex: 10001 }}>
               <div className="text-xs text-gray-500 mb-1.5 text-center">颜色</div>
               <div className="flex flex-col gap-1.5 items-center">
                 {colors.map((colorOption) => (
@@ -192,20 +192,20 @@ const TimeSelect = ({ value, color, completed = false, estimatedTime, onChange, 
                       color === colorOption.value ? 'ring-2 ring-blue-400 ring-offset-0' : ''
                     }`}
                     title={`${colorOption.name} (${colorOption.letter})`}
-                    style={{ position: 'relative', zIndex: 9000 }}
+                    style={{ position: 'relative', zIndex: 10001 }}
                   >
-                    <span className="text-[10px] font-bold" style={{ position: 'relative', zIndex: 9000 }}>{colorOption.letter}</span>
+                    <span className="text-[10px] font-bold" style={{ position: 'relative', zIndex: 10001 }}>{colorOption.letter}</span>
                   </button>
                 ))}
               </div>
             </div>
             
             {/* 时间选择区域 */}
-            <div className="w-20 max-h-56 overflow-y-auto" style={{ backgroundColor: '#ffffff', position: 'relative', zIndex: 9000 }}>
+            <div className="w-20 max-h-56 overflow-y-auto" style={{ backgroundColor: '#ffffff', position: 'relative', zIndex: 10001 }}>
               <button
                 onClick={clearTime}
                 className="w-full text-left px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 border-b border-gray-200"
-                style={{ position: 'relative', zIndex: 9000 }}
+                style={{ position: 'relative', zIndex: 10001 }}
               >
                 清除
               </button>
@@ -217,7 +217,7 @@ const TimeSelect = ({ value, color, completed = false, estimatedTime, onChange, 
                   className={`w-full text-left px-2 py-1 text-xs hover:bg-blue-50 transition-colors ${
                     value === time ? 'bg-blue-100 text-blue-700' : 'text-gray-700'
                   }`}
-                  style={{ position: 'relative', zIndex: 9000 }}
+                  style={{ position: 'relative', zIndex: 10001 }}
                 >
                   {time}
                 </button>

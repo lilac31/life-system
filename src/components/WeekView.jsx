@@ -1084,6 +1084,7 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange, o
                                 highlightedColor && quickTask.color === highlightedColor ? false : quickTask.completed
                               ) : 'transparent',
                             position: 'relative',
+                            zIndex: 0,
                             transition: 'all 0.2s ease'
                           }}
                         >
@@ -1203,6 +1204,13 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange, o
                           {/* 内容输入区域 */}
                           <div className={`flex-1 flex items-start overflow-hidden ${quickTask.completed ? 'opacity-60' : ''}`} onDragStart={(e) => e.preventDefault()}>
                             <textarea
+                              ref={(el) => {
+                                // 页面加载时自动调整高度
+                                if (el && quickTask.text) {
+                                  el.style.height = 'auto';
+                                  el.style.height = `${el.scrollHeight}px`;
+                                }
+                              }}
                               value={quickTask.text}
                               onChange={(e) => {
                                 updateQuickTask(dayKey, slot.id, index, 'text', e.target.value);
