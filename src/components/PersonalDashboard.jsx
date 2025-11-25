@@ -31,6 +31,10 @@ const PersonalDashboard = ({ onBack }) => {
     points: 1,
     date: new Date()
   });
+  
+  // AI 分析状态
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [aiSuggestion, setAiSuggestion] = useState(null);
 
   // 生成从今天到过年的日期列表
   const generateDateGrid = () => {
@@ -460,6 +464,128 @@ const PersonalDashboard = ({ onBack }) => {
     }
   };
 
+  // AI 分析日记内容
+  const analyzeWithAI = async () => {
+    if (!newDiary.content.trim()) {
+      alert('请先输入日记内容');
+      return;
+    }
+    
+    const apiKey = import.meta.env.VITE_DEEPSEEK_API_KEY;
+    if (!apiKey || apiKey === 'your-deepseek-api-key-here') {
+      alert('请先在 .env 文件中配置 VITE_DEEPSEEK_API_KEY');
+      return;
+    }
+    
+    setIsAnalyzing(true);
+    setAiSuggestion(null);
+    
+    try {
+      // 准备维度信息
+      const dimensionInfo = dimensions.map(d => {
+        if (d.subCategories && d.subCategories.length > 0) {
+          return {
+            name: d.name,
+            subCategories: d.subCategories.map(sc => sc.name)
+          };
+        }
+        return { name: d.name, subCategories: [] };
+      });
+      
+      const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: 'deepseek-chat',
+          messages: [
+            {
+              role: 'system',
+              content: `你是一个个人成长分析助手。用户有以下成长维度：${JSON.stringify(dimensionInfo, null, 2)}。
+
+请分析用户的日记内容，建议应该在哪些维度（或二级分类）上增加分数，以及建议增加的分数值（1-10分）。
+如果日记内容涉及到现有维度没有覆盖的新领域，也可以建议新的维度。
+
+请严格按照以下JSON格式返回，不要包含任何其他文字说明：
+{
+  "suggestions": [
+    {
+      "dimension": "维度名称",
+      "subCategory": "二级分类名称（如果有，没有则为空字符串）",
+      "points": 5,
+      "reason": "建议理由"
+    }
+  ],
+  "newDimensions": [
+    {
+      "name": "新维度名称",
+      "reason": "建议理由"
+    }
+  ]
+}`
+            },
+            {
+              role: 'user',
+              content: `我的日记内容：${newDiary.content}`
+            }
+          ],
+          temperature: 0.7
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (data.choices && data.choices[0]) {
+        const content = data.choices[0].message.content;
+        // 尝试解析 JSON
+        try {
+          // 提取 JSON 部分（可能包含在代码块中）
+          let jsonStr = content;
+          const jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/) || content.match(/```\s*([\s\S]*?)\s*```/);
+          if (jsonMatch) {
+            jsonStr = jsonMatch[1];
+          }
+          
+          const suggestion = JSON.parse(jsonStr);
+          setAiSuggestion(suggestion);
+        } catch (e) {
+          console.error('JSON 解析失败:', e);
+          // 如果不是标准 JSON，显示原始内容
+          setAiSuggestion({ raw: content });
+        }
+      } else {
+        throw new Error('AI 返回数据格式错误');
+      }
+    } catch (error) {
+      console.error('AI 分析失败:', error);
+      alert(`AI 分析失败: ${error.message}\n请检查网络连接或 API Key 是否正确`);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+  
+  // 应用 AI 建议
+  const applySuggestion = (suggestion) => {
+    // 查找对应的维度和二级分类
+    const dimension = dimensions.find(d => d.name === suggestion.dimension);
+    if (!dimension) return;
+    
+    let subCategoryId = '';
+    if (suggestion.subCategory) {
+      const subCategory = dimension.subCategories?.find(sc => sc.name === suggestion.subCategory);
+      subCategoryId = subCategory?.id || '';
+    }
+    
+    setNewDiary({
+      ...newDiary,
+      selectedDimension: dimension.id,
+      selectedSubCategory: subCategoryId,
+      points: suggestion.points || 1
+    });
+  };
+  
   // 添加日记
   const handleAddDiary = () => {
     if (!newDiary.content.trim() || !newDiary.selectedDimension) return;
@@ -483,6 +609,40 @@ const PersonalDashboard = ({ onBack }) => {
       date: new Date()
     });
     setIsAddingDiary(false);
+    setAiSuggestion(null);
+  };
+  
+  // 获取可选择的维度列表（与柱状图一致）
+  const getSelectableDimensions = () => {
+    const result = [];
+    dimensions.forEach(dimension => {
+      const hasSubCategories = dimension.subCategories && dimension.subCategories.length > 0;
+      
+      if (hasSubCategories) {
+        // 有二级分类时，只返回二级分类
+        dimension.subCategories.forEach(subCategory => {
+          result.push({
+            dimensionId: dimension.id,
+            dimensionName: dimension.name,
+            subCategoryId: subCategory.id,
+            subCategoryName: subCategory.name,
+            displayName: `${dimension.name} - ${subCategory.name}`,
+            color: dimension.color
+          });
+        });
+      } else {
+        // 没有二级分类时，返回一级维度
+        result.push({
+          dimensionId: dimension.id,
+          dimensionName: dimension.name,
+          subCategoryId: null,
+          subCategoryName: null,
+          displayName: dimension.name,
+          color: dimension.color
+        });
+      }
+    });
+    return result;
   };
 
   // 删除日记
@@ -1395,52 +1555,129 @@ const PersonalDashboard = ({ onBack }) => {
                   }}
                 />
                 
-                <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                {/* AI 分析按钮 */}
+                <div style={{ marginBottom: '8px' }}>
+                  <button
+                    onClick={analyzeWithAI}
+                    disabled={isAnalyzing}
+                    style={{
+                      backgroundColor: isAnalyzing ? '#D1D5DB' : '#8B5CF6',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      padding: '6px 12px',
+                      cursor: isAnalyzing ? 'not-allowed' : 'pointer',
+                      fontSize: '12px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                  >
+                    <Sparkles size={14} />
+                    {isAnalyzing ? '分析中...' : 'AI 智能分析'}
+                  </button>
+                </div>
+                
+                {/* AI 建议显示 */}
+                {aiSuggestion && (
+                  <div style={{
+                    backgroundColor: '#F3F4F6',
+                    borderRadius: '6px',
+                    padding: '12px',
+                    marginBottom: '8px',
+                    fontSize: '12px'
+                  }}>
+                    <div style={{ fontWeight: '600', marginBottom: '8px', color: '#374151' }}>
+                      🤖 AI 分析建议：
+                    </div>
+                    
+                    {aiSuggestion.suggestions && aiSuggestion.suggestions.length > 0 && (
+                      <div style={{ marginBottom: '8px' }}>
+                        {aiSuggestion.suggestions.map((suggestion, index) => (
+                          <div key={index} style={{
+                            backgroundColor: 'white',
+                            padding: '8px',
+                            borderRadius: '4px',
+                            marginBottom: '6px',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center'
+                          }}>
+                            <div>
+                              <div style={{ fontWeight: '500', color: '#374151' }}>
+                                {suggestion.dimension}{suggestion.subCategory && ` - ${suggestion.subCategory}`}
+                              </div>
+                              <div style={{ fontSize: '11px', color: '#6B7280', marginTop: '2px' }}>
+                                建议 +{suggestion.points} 分 • {suggestion.reason}
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => applySuggestion(suggestion)}
+                              style={{
+                                backgroundColor: '#3B82F6',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '4px',
+                                padding: '4px 8px',
+                                cursor: 'pointer',
+                                fontSize: '10px'
+                              }}
+                            >
+                              应用
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    
+                    {aiSuggestion.newDimensions && aiSuggestion.newDimensions.length > 0 && (
+                      <div>
+                        <div style={{ fontWeight: '500', color: '#F59E0B', marginBottom: '4px' }}>
+                          💡 建议新增维度：
+                        </div>
+                        {aiSuggestion.newDimensions.map((newDim, index) => (
+                          <div key={index} style={{ fontSize: '11px', color: '#6B7280', marginBottom: '2px' }}>
+                            • {newDim.name} - {newDim.reason}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    
+                    {aiSuggestion.raw && (
+                      <div style={{ color: '#6B7280', whiteSpace: 'pre-wrap' }}>
+                        {aiSuggestion.raw}
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                {/* 维度选择 - 与柱状图一致 */}
+                <div style={{ marginBottom: '8px' }}>
                   <select
-                    value={newDiary.selectedDimension}
+                    value={`${newDiary.selectedDimension}|${newDiary.selectedSubCategory}`}
                     onChange={(e) => {
+                      const [dimId, subCatId] = e.target.value.split('|');
                       setNewDiary({ 
                         ...newDiary, 
-                        selectedDimension: e.target.value,
-                        selectedSubCategory: '' // 重置二级分类
+                        selectedDimension: dimId,
+                        selectedSubCategory: subCatId
                       });
                     }}
                     style={{
-                      flex: 1,
+                      width: '100%',
                       padding: '8px',
                       border: '1px solid #D1D5DB',
                       borderRadius: '4px',
                       fontSize: '14px'
                     }}
                   >
-                    <option value="">选择维度</option>
-                    {dimensions.map(dimension => (
-                      <option key={dimension.id} value={dimension.id}>
-                        {dimension.name}
+                    <option value="|">选择维度</option>
+                    {getSelectableDimensions().map((item, index) => (
+                      <option key={index} value={`${item.dimensionId}|${item.subCategoryId || ''}`}>
+                        {item.displayName}
                       </option>
                     ))}
                   </select>
-                  
-                  {newDiary.selectedDimension && dimensions.find(d => d.id === newDiary.selectedDimension)?.subCategories?.length > 0 && (
-                    <select
-                      value={newDiary.selectedSubCategory}
-                      onChange={(e) => setNewDiary({ ...newDiary, selectedSubCategory: e.target.value })}
-                      style={{
-                        flex: 1,
-                        padding: '8px',
-                        border: '1px solid #D1D5DB',
-                        borderRadius: '4px',
-                        fontSize: '14px'
-                      }}
-                    >
-                      <option value="">选择二级分类</option>
-                      {dimensions.find(d => d.id === newDiary.selectedDimension)?.subCategories?.map(subCategory => (
-                        <option key={subCategory.id} value={subCategory.id}>
-                          {subCategory.name}
-                        </option>
-                      ))}
-                    </select>
-                  )}
                 </div>
                 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1490,6 +1727,7 @@ const PersonalDashboard = ({ onBack }) => {
                           points: 1,
                           date: new Date()
                         });
+                        setAiSuggestion(null);
                       }}
                       style={{
                         backgroundColor: '#F3F4F6',
