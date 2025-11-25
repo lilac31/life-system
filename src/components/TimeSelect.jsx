@@ -57,22 +57,24 @@ const TimeSelect = ({ value, color, completed = false, estimatedTime, onChange, 
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // 当下拉菜单打开时，根据时间段设置默认滚动位置
+  // 当下拉菜单打开时，根据时间段设置默认滚动位置（只执行一次）
+  const hasScrolledRef = useRef(false);
+  
   useEffect(() => {
-    if (isOpen && dropdownRef.current) {
+    if (isOpen && dropdownRef.current && !hasScrolledRef.current) {
       // 延迟确保DOM完全渲染
       const timer = setTimeout(() => {
         if (dropdownRef.current) {
-          // 根据时间段确定默认时间
+          // 根据时间段确定默认时间（对应用户希望看到的第一个时间）
           let defaultTime = '10:00'; // 默认值
           if (slotId === 'morning') {
-            defaultTime = '10:00';
+            defaultTime = '09:00'; // 早上从9点开始
           } else if (slotId === 'noon') {
-            defaultTime = '13:00';
+            defaultTime = '12:00'; // 中午从12点开始
           } else if (slotId === 'afternoon') {
-            defaultTime = '15:00';
+            defaultTime = '14:00'; // 下午从14点开始
           } else if (slotId === 'evening') {
-            defaultTime = '19:00';
+            defaultTime = '18:00'; // 晚上从18点开始
           }
           
           const targetButton = dropdownRef.current.querySelector(`button[data-time="${defaultTime}"]`);
@@ -89,12 +91,20 @@ const TimeSelect = ({ value, color, completed = false, estimatedTime, onChange, 
               dropdownRef.current.scrollTop = targetIndex * itemHeight - 80;
             }
           }
+          
+          // 标记已经滚动过了
+          hasScrolledRef.current = true;
         }
       }, 50);
       
       return () => clearTimeout(timer);
     }
-  }, [isOpen, timeOptions, slotId]);
+    
+    // 当关闭时重置标记
+    if (!isOpen) {
+      hasScrolledRef.current = false;
+    }
+  }, [isOpen, slotId]);
 
   const handleTimeSelect = (time) => {
     onChange(time);
@@ -172,16 +182,16 @@ const TimeSelect = ({ value, color, completed = false, estimatedTime, onChange, 
                   window.innerWidth - 100
                 )
               ) : 'auto',
-            zIndex: 10001,
+            zIndex: 9000,
             backgroundColor: '#ffffff',
             opacity: 1,
             position: 'fixed'
           }}
         >
           {/* 上半部分：颜色和时间选择 */}
-          <div className="flex" style={{ backgroundColor: '#ffffff', position: 'relative', zIndex: 10001 }}>
+          <div className="flex" style={{ backgroundColor: '#ffffff', position: 'relative', zIndex: 9000 }}>
             {/* 颜色选择区域 */}
-            <div className="w-20 p-2 border-r border-gray-200" style={{ backgroundColor: '#ffffff', position: 'relative', zIndex: 10001 }}>
+            <div className="w-20 p-2 border-r border-gray-200" style={{ backgroundColor: '#ffffff', position: 'relative', zIndex: 9000 }}>
               <div className="text-xs text-gray-500 mb-1.5 text-center">颜色</div>
               <div className="flex flex-col gap-1.5 items-center">
                 {colors.map((colorOption) => (
@@ -192,20 +202,20 @@ const TimeSelect = ({ value, color, completed = false, estimatedTime, onChange, 
                       color === colorOption.value ? 'ring-2 ring-blue-400 ring-offset-0' : ''
                     }`}
                     title={`${colorOption.name} (${colorOption.letter})`}
-                    style={{ position: 'relative', zIndex: 10001 }}
+                    style={{ position: 'relative', zIndex: 9000 }}
                   >
-                    <span className="text-[10px] font-bold" style={{ position: 'relative', zIndex: 10001 }}>{colorOption.letter}</span>
+                    <span className="text-[10px] font-bold" style={{ position: 'relative', zIndex: 9000 }}>{colorOption.letter}</span>
                   </button>
                 ))}
               </div>
             </div>
             
             {/* 时间选择区域 */}
-            <div className="w-20 max-h-56 overflow-y-auto" style={{ backgroundColor: '#ffffff', position: 'relative', zIndex: 10001 }}>
+            <div className="w-20 max-h-56 overflow-y-auto" style={{ backgroundColor: '#ffffff', position: 'relative', zIndex: 9000 }}>
               <button
                 onClick={clearTime}
                 className="w-full text-left px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 border-b border-gray-200"
-                style={{ position: 'relative', zIndex: 10001 }}
+                style={{ position: 'relative', zIndex: 9000 }}
               >
                 清除
               </button>
@@ -217,7 +227,7 @@ const TimeSelect = ({ value, color, completed = false, estimatedTime, onChange, 
                   className={`w-full text-left px-2 py-1 text-xs hover:bg-blue-50 transition-colors ${
                     value === time ? 'bg-blue-100 text-blue-700' : 'text-gray-700'
                   }`}
-                  style={{ position: 'relative', zIndex: 10001 }}
+                  style={{ position: 'relative', zIndex: 9000 }}
                 >
                   {time}
                 </button>

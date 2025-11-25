@@ -10,7 +10,8 @@ const Navigation = ({ currentView, onViewChange }) => {
     { id: 'reading', name: '阅读和观影', externalLink: 'https://z28332x6mn.feishu.cn/wiki/ZcuBw5Saoi5SuAkKFyjcuXLrnge?table=tbla5V81HtkXZqrP&view=vewUiR9Gc5' },
     { id: 'e', name: 'E', externalLink: '' },
     { id: 'x', name: 'X', externalLink: '' },
-    { id: 'y', name: 'Y', externalLink: '' }
+    { id: 'y', name: 'Y', externalLink: '' },
+    { id: 'thinking', name: '思考本', externalLink: 'file:///Users/xiaoyeye/Library/Containers/com.tencent.xinWeChat/Data/Library/Application%20Support/com.tencent.xinWeChat/2.0b4.0.9/fffcfcfb7f59da1ba84daa4d785aae2b/Message/MessageTemp/82a36f09fc32fe49222e10498f740a3e/File/html-preview.html' }
   ];
 
   return (
@@ -36,7 +37,7 @@ const Navigation = ({ currentView, onViewChange }) => {
               onClick={(e) => e.stopPropagation()}
             >
               <ExternalLink className="w-3 h-3" />
-              打开飞书文档
+              {view.id === 'thinking' ? '打开思维卡' : '打开飞书文档'}
             </a>
           )}
         </div>

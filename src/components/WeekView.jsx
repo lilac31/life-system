@@ -396,7 +396,9 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange, o
       sourceSlotId: slotId,
       sourceTaskIndex: taskIndex
     });
+    // 设置为 'move' 而不是 'copy'
     e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.dropEffect = 'move';
     e.dataTransfer.setData('text/plain', ''); // 兼容性
     
     // 添加拖拽时的视觉反馈
@@ -475,8 +477,9 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange, o
       estimatedTime: task.estimatedTime || 0
     };
     
-    // 从源位置删除任务
-    const sourceTasks = quickTasks[sourceDayKey][sourceSlotId].filter((_, i) => i !== sourceTaskIndex);
+    // 从源位置删除任务 - 先保存原始任务ID用于过滤
+    const originalTaskId = task.id;
+    const sourceTasks = quickTasks[sourceDayKey][sourceSlotId].filter((t, i) => i !== sourceTaskIndex);
     
     // 确保源位置至少有一个空行
     if (sourceTasks.length === 0 || sourceTasks.every(t => t.text || t.time)) {
@@ -490,8 +493,8 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange, o
       });
     }
     
-    // 确保目标位置有数据结构
-    const targetTasks = quickTasks[targetDayKey]?.[targetSlotId] || [];
+    // 确保目标位置有数据结构，并过滤掉可能存在的重复任务
+    const targetTasks = (quickTasks[targetDayKey]?.[targetSlotId] || []).filter(t => t.id !== originalTaskId);
     
     // 如果指定了目标任务索引，插入到该位置；否则插入到最后一个非空任务后
     let insertIndex;
