@@ -645,7 +645,8 @@ const PersonalDashboard = ({ onBack }) => {
           backgroundColor: '#F9FAFB',
           borderRadius: '8px',
           padding: '16px',
-          overflow: 'auto'
+          overflowX: 'auto',
+          overflowY: 'hidden'
         }}>
           {/* Y轴刻度 */}
           <div style={{
@@ -658,7 +659,9 @@ const PersonalDashboard = ({ onBack }) => {
             flexDirection: 'column',
             justifyContent: 'space-between',
             fontSize: '10px',
-            color: '#6B7280'
+            color: '#6B7280',
+            paddingTop: '16px',
+            paddingBottom: '40px'
           }}>
             <div>{maxScore}</div>
             <div>{Math.round(maxScore * 0.75)}</div>
@@ -671,7 +674,8 @@ const PersonalDashboard = ({ onBack }) => {
           <div style={{
             marginLeft: '35px',
             height: '100%',
-            position: 'relative'
+            position: 'relative',
+            minWidth: `${growthData.length * 70}px`
           }}>
             {/* 网格线 */}
             <div style={{
@@ -679,7 +683,7 @@ const PersonalDashboard = ({ onBack }) => {
               left: 0,
               right: 0,
               top: 0,
-              bottom: 0,
+              bottom: '40px',
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'space-between'
@@ -697,73 +701,105 @@ const PersonalDashboard = ({ onBack }) => {
               position: 'absolute',
               left: 0,
               right: 0,
-              bottom: 0,
-              height: '100%',
+              bottom: '40px',
+              top: 0,
               display: 'flex',
               alignItems: 'flex-end',
-              gap: '8px',
-              paddingBottom: '20px' // 为标签留空间
+              gap: '8px'
             }}>
-              {growthData.map((item, index) => (
-                <div key={item.id} style={{
+              {growthData.map((item) => {
+                const chartHeight = 100; // 可用高度百分比
+                const baseHeight = (item.baseScore / maxScore) * chartHeight;
+                const todayHeight = (item.todayPoints / maxScore) * chartHeight;
+                
+                return (
+                  <div key={item.id} style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    flex: 1,
+                    minWidth: '60px',
+                    height: '100%',
+                    position: 'relative'
+                  }}>
+                    {/* 分数标签 */}
+                    {item.todayPoints > 0 && (
+                      <div style={{
+                        position: 'absolute',
+                        top: `${100 - baseHeight - todayHeight - 5}%`,
+                        fontSize: '10px',
+                        color: '#10B981',
+                        fontWeight: 'bold',
+                        whiteSpace: 'nowrap'
+                      }}>
+                        +{item.todayPoints}
+                      </div>
+                    )}
+                    
+                    {/* 柱状图容器 - 从底部开始 */}
+                    <div style={{
+                      width: '100%',
+                      height: '100%',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'flex-end',
+                      alignItems: 'center'
+                    }}>
+                      {/* 今日增加分数（半透明层） */}
+                      {item.todayPoints > 0 && (
+                        <div style={{
+                          width: '80%',
+                          height: `${todayHeight}%`,
+                          backgroundColor: item.color,
+                          opacity: 0.4,
+                          borderRadius: '4px 4px 0 0',
+                          minHeight: '2px'
+                        }}></div>
+                      )}
+                      
+                      {/* 基础分数柱 */}
+                      <div style={{
+                        width: '80%',
+                        height: `${baseHeight}%`,
+                        backgroundColor: item.color,
+                        borderRadius: item.todayPoints > 0 ? '0' : '4px 4px 0 0',
+                        minHeight: '4px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: 'white',
+                        fontSize: '11px',
+                        fontWeight: 'bold'
+                      }}>
+                        {item.totalScore}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            
+            {/* X轴标签 */}
+            <div style={{
+              position: 'absolute',
+              left: 0,
+              right: 0,
+              bottom: 0,
+              height: '40px',
+              display: 'flex',
+              gap: '8px'
+            }}>
+              {growthData.map((item) => (
+                <div key={`label-${item.id}`} style={{
+                  flex: 1,
+                  minWidth: '60px',
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
-                  flex: 1,
-                  maxWidth: '60px',
-                  position: 'relative'
+                  justifyContent: 'flex-start',
+                  paddingTop: '4px'
                 }}>
-                  {/* 分数标签 */}
-                  {item.todayPoints > 0 && (
-                    <div style={{
-                      position: 'absolute',
-                      top: '-20px',
-                      fontSize: '10px',
-                      color: '#10B981',
-                      fontWeight: 'bold',
-                      whiteSpace: 'nowrap'
-                    }}>
-                      +{item.todayPoints}
-                    </div>
-                  )}
-                  
-                  {/* 柱状图容器 */}
                   <div style={{
-                    width: '100%',
-                    height: '100%',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'flex-end',
-                    alignItems: 'center'
-                  }}>
-                    {/* 基础分数柱 */}
-                    <div style={{
-                      width: '80%',
-                      height: `${(item.baseScore / maxScore) * 100}%`,
-                      backgroundColor: item.color,
-                      borderRadius: '4px 4px 0 0',
-                      position: 'relative',
-                      minHeight: '4px'
-                    }}>
-                      {/* 今日分数柱（半透明） */}
-                      {item.todayPoints > 0 && (
-                        <div style={{
-                          position: 'absolute',
-                          bottom: 0,
-                          left: 0,
-                          right: 0,
-                          height: `${(item.todayPoints / item.totalScore) * 100}%`,
-                          backgroundColor: item.color,
-                          opacity: 0.3,
-                          borderRadius: '4px 4px 0 0'
-                        }}></div>
-                      )}
-                    </div>
-                  </div>
-                  
-                  {/* X轴标签 */}
-                  <div style={{
-                    marginTop: '8px',
                     fontSize: '10px',
                     color: '#374151',
                     textAlign: 'center',
