@@ -83,24 +83,26 @@ const PersonalDashboard = ({ onBack }) => {
       const date = addDays(today, -i);
       const dateStr = format(date, 'yyyy-MM-dd');
       
-      // 计算当天总分数
+      // 计算当天总分数 - 包含所有维度的基础分和二级分类分
       let dayScore = 0;
+      dimensions.forEach(dimension => {
+        // 添加基础分
+        dayScore += dimension.baseScore || 60; // 默认60分
+        
+        // 添加二级分类分数
+        if (dimension.subCategories) {
+          dimension.subCategories.forEach(subCategory => {
+            dayScore += subCategory.score || 0; // 默认60分
+          });
+        }
+      });
+      
+      // 添加当天日记积分
       diaryEntries
         .filter(entry => entry.date === dateStr)
         .forEach(entry => {
           dayScore += entry.points || 0;
         });
-      
-      // 添加基础分和二级分类分
-      dimensions.forEach(dimension => {
-        dayScore += dimension.baseScore / 7; // 均分到每天
-        
-        if (dimension.subCategories) {
-          dimension.subCategories.forEach(subCategory => {
-            dayScore += (subCategory.score || 0) / 7; // 均分到每天
-          });
-        }
-      });
       
       data.push({
         date: format(date, 'MM/dd'),
@@ -161,10 +163,10 @@ const PersonalDashboard = ({ onBack }) => {
       // 默认维度（带二级分类）
       const defaultDimensions = [
         { id: '1', name: '专业技能', baseScore: 60, color: '#3B82F6', subCategories: [] },
-        { id: '2', name: '沟通能力', baseScore: 50, color: '#10B981', subCategories: [] },
-        { id: '3', name: '领导力', baseScore: 40, color: '#F59E0B', subCategories: [] },
-        { id: '4', name: '创新思维', baseScore: 55, color: '#8B5CF6', subCategories: [] },
-        { id: '5', name: '健康管理', baseScore: 45, color: '#EF4444', subCategories: [] }
+        { id: '2', name: '沟通能力', baseScore: 60, color: '#10B981', subCategories: [] },
+        { id: '3', name: '领导力', baseScore: 60, color: '#F59E0B', subCategories: [] },
+        { id: '4', name: '创新思维', baseScore: 60, color: '#8B5CF6', subCategories: [] },
+        { id: '5', name: '健康管理', baseScore: 60, color: '#EF4444', subCategories: [] }
       ];
       setDimensions(defaultDimensions);
       localStorage.setItem('growthDimensions', JSON.stringify(defaultDimensions));
@@ -280,7 +282,7 @@ const PersonalDashboard = ({ onBack }) => {
           subCategories: [...subCategories, {
             id: Date.now().toString(),
             name: newSubCategoryName.trim(),
-            score: 0 // 新增二级分类的初始分数
+            score: 60 // 新增二级分类的默认分数
           }]
         };
       }
@@ -352,7 +354,7 @@ const PersonalDashboard = ({ onBack }) => {
   // 开始编辑二级分类分数
   const startEditingSubCategoryScore = (subCategoryId, currentScore) => {
     setEditingSubCategoryScore(subCategoryId);
-    setSubCategoryScore(currentScore.toString());
+    setSubCategoryScore((currentScore || 60).toString());
   };
 
   // 删除维度
@@ -391,10 +393,11 @@ const PersonalDashboard = ({ onBack }) => {
     const yesterday = format(new Date(Date.now() - 86400000), 'yyyy-MM-dd');
     
     const dimension = dimensions.find(d => d.id === dimensionId);
+    if (!dimension) return { today: 0, yesterday: 0 };
     
     if (subCategoryId) {
       // 计算二级分类的分数
-      const subCategory = dimension?.subCategories?.find(sc => sc.id === subCategoryId);
+      const subCategory = dimension.subCategories?.find(sc => sc.id === subCategoryId);
       if (!subCategory) return { today: 0, yesterday: 0 };
       
       const todayEntries = diaryEntries.filter(entry => 
@@ -409,8 +412,8 @@ const PersonalDashboard = ({ onBack }) => {
         entry.subCategoryId === subCategoryId
       );
       
-      const todayScore = todayEntries.reduce((sum, entry) => sum + entry.points, 0) + (subCategory.score || 0);
-      const yesterdayScore = yesterdayEntries.reduce((sum, entry) => sum + entry.points, 0) + (subCategory.score || 0);
+      const todayScore = todayEntries.reduce((sum, entry) => sum + entry.points, 0) + (subCategory.score || 60);
+      const yesterdayScore = yesterdayEntries.reduce((sum, entry) => sum + entry.points, 0) + (subCategory.score || 60);
       
       return { today: todayScore, yesterday: yesterdayScore };
     } else {
@@ -425,14 +428,14 @@ const PersonalDashboard = ({ onBack }) => {
       
       // 计算所有二级分类的总分
       let subCategoriesTotal = 0;
-      if (dimension?.subCategories) {
-        subCategoriesTotal = dimension.subCategories.reduce((sum, sc) => sum + (sc.score || 0), 0);
+      if (dimension.subCategories) {
+        subCategoriesTotal = dimension.subCategories.reduce((sum, sc) => sum + (sc.score || 60), 0);
       }
       
       const todayScore = todayEntries.reduce((sum, entry) => sum + entry.points, 0) + 
-                       (dimension?.baseScore || 0) + subCategoriesTotal;
+                       (dimension.baseScore || 60) + subCategoriesTotal;
       const yesterdayScore = yesterdayEntries.reduce((sum, entry) => sum + entry.points, 0) + 
-                          (dimension?.baseScore || 0) + subCategoriesTotal;
+                          (dimension.baseScore || 60) + subCategoriesTotal;
       
       return { today: todayScore, yesterday: yesterdayScore };
     }
