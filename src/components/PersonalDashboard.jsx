@@ -75,40 +75,56 @@ const PersonalDashboard = ({ onBack }) => {
 
   // 获取成长数据用于柱状图
   const getGrowthData = () => {
-    // 获取最近7天的数据
+    const today = format(new Date(), 'yyyy-MM-dd');
     const data = [];
-    const today = new Date();
     
-    for (let i = 6; i >= 0; i--) {
-      const date = addDays(today, -i);
-      const dateStr = format(date, 'yyyy-MM-dd');
+    // 处理每个维度
+    dimensions.forEach(dimension => {
+      // 添加主维度数据
+      const baseScore = dimension.baseScore || 60;
       
-      // 计算当天总分数 - 包含所有维度的基础分和二级分类分
-      let dayScore = 0;
-      dimensions.forEach(dimension => {
-        // 添加基础分
-        dayScore += dimension.baseScore || 60; // 默认60分
-        
-        // 添加二级分类分数
-        if (dimension.subCategories) {
-          dimension.subCategories.forEach(subCategory => {
-            dayScore += subCategory.score || 0; // 默认60分
-          });
-        }
-      });
-      
-      // 添加当天日记积分
-      diaryEntries
-        .filter(entry => entry.date === dateStr)
-        .forEach(entry => {
-          dayScore += entry.points || 0;
-        });
+      // 计算今天该维度的日记积分
+      const todayEntries = diaryEntries.filter(entry => 
+        entry.date === today && entry.dimensionId === dimension.id && !entry.subCategoryId
+      );
+      const todayPoints = todayEntries.reduce((sum, entry) => sum + entry.points, 0);
       
       data.push({
-        date: format(date, 'MM/dd'),
-        score: Math.round(dayScore)
+        id: dimension.id,
+        name: dimension.name,
+        baseScore: baseScore,
+        todayPoints: todayPoints,
+        totalScore: baseScore + todayPoints,
+        color: dimension.color,
+        isSubCategory: false
       });
-    }
+      
+      // 添加二级分类数据
+      if (dimension.subCategories && dimension.subCategories.length > 0) {
+        dimension.subCategories.forEach(subCategory => {
+          const subBaseScore = subCategory.score || 60;
+          
+          // 计算今天该二级分类的日记积分
+          const todaySubEntries = diaryEntries.filter(entry => 
+            entry.date === today && 
+            entry.dimensionId === dimension.id && 
+            entry.subCategoryId === subCategory.id
+          );
+          const todaySubPoints = todaySubEntries.reduce((sum, entry) => sum + entry.points, 0);
+          
+          data.push({
+            id: subCategory.id,
+            name: subCategory.name,
+            baseScore: subBaseScore,
+            todayPoints: todaySubPoints,
+            totalScore: subBaseScore + todaySubPoints,
+            color: dimension.color,
+            isSubCategory: true,
+            parentName: dimension.name
+          });
+        });
+      }
+    });
     
     return data;
   };
@@ -589,7 +605,7 @@ const PersonalDashboard = ({ onBack }) => {
   // 渲染成长柱状图
   const renderGrowthChart = () => {
     const growthData = getGrowthData();
-    const maxScore = 200; // 默认最大值200分
+    const maxScore = Math.max(...growthData.map(item => item.totalScore), 120); // 动态计算最大值
     
     return (
       <div style={{
@@ -619,43 +635,160 @@ const PersonalDashboard = ({ onBack }) => {
           </div>
         </div>
         
+        {/* 图表容器 */}
         <div style={{
-          height: '120px',
-          display: 'flex',
-          alignItems: 'flex-end',
-          justifyContent: 'space-between',
-          gap: '4px'
+          height: '200px',
+          position: 'relative',
+          backgroundColor: '#F9FAFB',
+          borderRadius: '8px',
+          padding: '16px',
+          overflow: 'auto'
         }}>
-          {growthData.map((item, index) => (
-            <div key={index} style={{
+          {/* Y轴刻度 */}
+          <div style={{
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            bottom: 0,
+            width: '30px',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            fontSize: '10px',
+            color: '#6B7280'
+          }}>
+            <div>{maxScore}</div>
+            <div>{Math.round(maxScore * 0.75)}</div>
+            <div>{Math.round(maxScore * 0.5)}</div>
+            <div>{Math.round(maxScore * 0.25)}</div>
+            <div>0</div>
+          </div>
+          
+          {/* 图表区域 */}
+          <div style={{
+            marginLeft: '35px',
+            height: '100%',
+            position: 'relative'
+          }}>
+            {/* 网格线 */}
+            <div style={{
+              position: 'absolute',
+              left: 0,
+              right: 0,
+              top: 0,
+              bottom: 0,
               display: 'flex',
               flexDirection: 'column',
-              alignItems: 'center',
-              flex: 1
+              justifyContent: 'space-between'
             }}>
-              <div style={{
-                width: '100%',
-                height: `${(item.score / maxScore) * 100}%`,
-                backgroundColor: '#3B82F6',
-                borderRadius: '4px 4px 0 0',
-                minHeight: '4px'
-              }}></div>
-              <div style={{
-                fontSize: '10px',
-                color: '#6B7280',
-                marginTop: '4px'
-              }}>
-                {item.date}
-              </div>
-              <div style={{
-                fontSize: '10px',
-                color: '#374151',
-                fontWeight: '500'
-              }}>
-                {item.score}
-              </div>
+              {[0, 1, 2, 3, 4].map(i => (
+                <div key={i} style={{
+                  borderTop: '1px solid #E5E7EB',
+                  width: '100%'
+                }}></div>
+              ))}
             </div>
-          ))}
+            
+            {/* 柱状图 */}
+            <div style={{
+              position: 'absolute',
+              left: 0,
+              right: 0,
+              bottom: 0,
+              height: '100%',
+              display: 'flex',
+              alignItems: 'flex-end',
+              gap: '8px',
+              paddingBottom: '20px' // 为标签留空间
+            }}>
+              {growthData.map((item, index) => (
+                <div key={item.id} style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  flex: 1,
+                  maxWidth: '60px',
+                  position: 'relative'
+                }}>
+                  {/* 分数标签 */}
+                  {item.todayPoints > 0 && (
+                    <div style={{
+                      position: 'absolute',
+                      top: '-20px',
+                      fontSize: '10px',
+                      color: '#10B981',
+                      fontWeight: 'bold',
+                      whiteSpace: 'nowrap'
+                    }}>
+                      +{item.todayPoints}
+                    </div>
+                  )}
+                  
+                  {/* 柱状图容器 */}
+                  <div style={{
+                    width: '100%',
+                    height: '100%',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'flex-end',
+                    alignItems: 'center'
+                  }}>
+                    {/* 基础分数柱 */}
+                    <div style={{
+                      width: '80%',
+                      height: `${(item.baseScore / maxScore) * 100}%`,
+                      backgroundColor: item.color,
+                      borderRadius: '4px 4px 0 0',
+                      position: 'relative',
+                      minHeight: '4px'
+                    }}>
+                      {/* 今日分数柱（半透明） */}
+                      {item.todayPoints > 0 && (
+                        <div style={{
+                          position: 'absolute',
+                          bottom: 0,
+                          left: 0,
+                          right: 0,
+                          height: `${(item.todayPoints / item.totalScore) * 100}%`,
+                          backgroundColor: item.color,
+                          opacity: 0.3,
+                          borderRadius: '4px 4px 0 0'
+                        }}></div>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* X轴标签 */}
+                  <div style={{
+                    marginTop: '8px',
+                    fontSize: '10px',
+                    color: '#374151',
+                    textAlign: 'center',
+                    fontWeight: item.isSubCategory ? 'normal' : 'bold',
+                    maxWidth: '100%',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis'
+                  }}>
+                    {item.name}
+                  </div>
+                  {item.isSubCategory && (
+                    <div style={{
+                      fontSize: '8px',
+                      color: '#9CA3AF',
+                      textAlign: 'center',
+                      maxWidth: '100%',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis'
+                    }}>
+                      {item.parentName}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     );
