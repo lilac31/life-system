@@ -138,23 +138,26 @@ const PersonalDashboard = ({ onBack }) => {
 
   // 从云端和 localStorage 加载数据
   useEffect(() => {
+    let dataLoaded = false;
+    
     // 首先尝试从 life-system 的云端数据加载
     try {
       const allData = dataAPI.getAllData();
       const dashboardData = allData.personalDashboard || {};
       
-      // 使用云端数据（如果存在），否则使用 localStorage 数据
-      if (dashboardData.growthDimensions) {
+      // 使用云端数据（如果存在）
+      if (dashboardData.growthDimensions && dashboardData.growthDimensions.length > 0) {
         setDimensions(dashboardData.growthDimensions);
         localStorage.setItem('growthDimensions', JSON.stringify(dashboardData.growthDimensions));
+        dataLoaded = true;
       }
       
-      if (dashboardData.growthDiaries) {
+      if (dashboardData.growthDiaries && dashboardData.growthDiaries.length > 0) {
         setDiaryEntries(dashboardData.growthDiaries);
         localStorage.setItem('growthDiaries', JSON.stringify(dashboardData.growthDiaries));
       }
       
-      if (dashboardData.growthEnergyRecords) {
+      if (dashboardData.growthEnergyRecords && dashboardData.growthEnergyRecords.length > 0) {
         setEnergyRecords(dashboardData.growthEnergyRecords);
         localStorage.setItem('growthEnergyRecords', JSON.stringify(dashboardData.growthEnergyRecords));
         
@@ -167,11 +170,12 @@ const PersonalDashboard = ({ onBack }) => {
       }
     } catch (error) {
       console.warn('从云端加载数据失败，使用本地数据:', error);
-      loadFromLocalStorage();
     }
     
     // 如果没有云端数据，从 localStorage 加载
-    loadFromLocalStorage();
+    if (!dataLoaded) {
+      loadFromLocalStorage();
+    }
   }, []);
 
   // 从 localStorage 加载数据的备用函数
