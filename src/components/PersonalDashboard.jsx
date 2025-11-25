@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Plus, Trash2, Edit2, Save, X, Sparkles } from 'lucide-react';
 import { format } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
+import { dataAPI } from '../services/apiService';
 
 const PersonalDashboard = ({ onBack }) => {
   // 状态管理
@@ -29,15 +30,53 @@ const PersonalDashboard = ({ onBack }) => {
     date: new Date()
   });
 
-  // 从 localStorage 加载数据
+  // 从云端和 localStorage 加载数据
   useEffect(() => {
+    // 首先尝试从 life-system 的云端数据加载
+    try {
+      const allData = dataAPI.getAllData();
+      const dashboardData = allData.personalDashboard || {};
+      
+      // 使用云端数据（如果存在），否则使用 localStorage 数据
+      if (dashboardData.growthDimensions) {
+        setDimensions(dashboardData.growthDimensions);
+        localStorage.setItem('growthDimensions', JSON.stringify(dashboardData.growthDimensions));
+      }
+      
+      if (dashboardData.growthDiaries) {
+        setDiaryEntries(dashboardData.growthDiaries);
+        localStorage.setItem('growthDiaries', JSON.stringify(dashboardData.growthDiaries));
+      }
+      
+      if (dashboardData.growthEnergyRecords) {
+        setEnergyRecords(dashboardData.growthEnergyRecords);
+        localStorage.setItem('growthEnergyRecords', JSON.stringify(dashboardData.growthEnergyRecords));
+        
+        // 检查今天是否已记录
+        const today = format(new Date(), 'yyyy-MM-dd');
+        const todayRecord = dashboardData.growthEnergyRecords.find(r => r.date === today);
+        if (todayRecord) {
+          setTodayEnergy(todayRecord.level);
+        }
+      }
+    } catch (error) {
+      console.warn('从云端加载数据失败，使用本地数据:', error);
+      loadFromLocalStorage();
+    }
+    
+    // 如果没有云端数据，从 localStorage 加载
+    loadFromLocalStorage();
+  }, []);
+
+  // 从 localStorage 加载数据的备用函数
+  const loadFromLocalStorage = () => {
     const savedDimensions = localStorage.getItem('growthDimensions');
     const savedDiaries = localStorage.getItem('growthDiaries');
     const savedEnergyRecords = localStorage.getItem('growthEnergyRecords');
     
-    if (savedDimensions) {
+    if (savedDimensions && dimensions.length === 0) {
       setDimensions(JSON.parse(savedDimensions));
-    } else {
+    } else if (!savedDimensions) {
       // 默认维度（带二级分类）
       const defaultDimensions = [
         { id: '1', name: '专业技能', baseScore: 60, color: '#3B82F6', subCategories: [] },
@@ -50,11 +89,11 @@ const PersonalDashboard = ({ onBack }) => {
       localStorage.setItem('growthDimensions', JSON.stringify(defaultDimensions));
     }
     
-    if (savedDiaries) {
+    if (savedDiaries && diaryEntries.length === 0) {
       setDiaryEntries(JSON.parse(savedDiaries));
     }
 
-    if (savedEnergyRecords) {
+    if (savedEnergyRecords && energyRecords.length === 0) {
       const records = JSON.parse(savedEnergyRecords);
       setEnergyRecords(records);
       // 检查今天是否已记录
@@ -64,22 +103,51 @@ const PersonalDashboard = ({ onBack }) => {
         setTodayEnergy(todayRecord.level);
       }
     }
-  }, []);
+  };
 
-  // 保存数据到 localStorage
+  // 保存数据到 localStorage 和云同步
   const saveDimensions = (dims) => {
     setDimensions(dims);
     localStorage.setItem('growthDimensions', JSON.stringify(dims));
+    
+    // 同步到云端
+    syncToCloud('growthDimensions', dims);
   };
 
   const saveDiaries = (diaries) => {
     setDiaryEntries(diaries);
     localStorage.setItem('growthDiaries', JSON.stringify(diaries));
+    
+    // 同步到云端
+    syncToCloud('growthDiaries', diaries);
   };
 
   const saveEnergyRecords = (records) => {
     setEnergyRecords(records);
     localStorage.setItem('growthEnergyRecords', JSON.stringify(records));
+    
+    // 同步到云端
+    syncToCloud('growthEnergyRecords', records);
+  };
+
+  // 云端同步函数
+  const syncToCloud = (key, data) => {
+    try {
+      // 获取当前 life-system 的所有数据
+      const allData = dataAPI.getAllData();
+      
+      // 将 PersonalDashboard 的数据添加到 life-system 数据中
+      allData.personalDashboard = {
+        ...allData.personalDashboard,
+        [key]: data
+      };
+      
+      // 保存到 life-system 数据库，自动触发云同步
+      dataAPI.saveData(allData);
+    } catch (error) {
+      console.warn('云端同步失败:', error);
+      // 即使同步失败，本地数据仍然保持不变
+    }
   };
 
   // 记录能量状态
