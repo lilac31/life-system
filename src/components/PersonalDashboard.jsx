@@ -80,27 +80,11 @@ const PersonalDashboard = ({ onBack }) => {
     
     // 处理每个维度
     dimensions.forEach(dimension => {
-      // 添加主维度数据
-      const baseScore = dimension.baseScore || 60;
+      // 检查是否有二级分类
+      const hasSubCategories = dimension.subCategories && dimension.subCategories.length > 0;
       
-      // 计算今天该维度的日记积分
-      const todayEntries = diaryEntries.filter(entry => 
-        entry.date === today && entry.dimensionId === dimension.id && !entry.subCategoryId
-      );
-      const todayPoints = todayEntries.reduce((sum, entry) => sum + entry.points, 0);
-      
-      data.push({
-        id: dimension.id,
-        name: dimension.name,
-        baseScore: baseScore,
-        todayPoints: todayPoints,
-        totalScore: baseScore + todayPoints,
-        color: dimension.color,
-        isSubCategory: false
-      });
-      
-      // 添加二级分类数据
-      if (dimension.subCategories && dimension.subCategories.length > 0) {
+      if (hasSubCategories) {
+        // 有二级分类时，只显示二级分类，不显示一级维度
         dimension.subCategories.forEach(subCategory => {
           const subBaseScore = subCategory.score || 60;
           
@@ -122,6 +106,25 @@ const PersonalDashboard = ({ onBack }) => {
             isSubCategory: true,
             parentName: dimension.name
           });
+        });
+      } else {
+        // 没有二级分类时，显示一级维度
+        const baseScore = dimension.baseScore || 60;
+        
+        // 计算今天该维度的日记积分
+        const todayEntries = diaryEntries.filter(entry => 
+          entry.date === today && entry.dimensionId === dimension.id && !entry.subCategoryId
+        );
+        const todayPoints = todayEntries.reduce((sum, entry) => sum + entry.points, 0);
+        
+        data.push({
+          id: dimension.id,
+          name: dimension.name,
+          baseScore: baseScore,
+          todayPoints: todayPoints,
+          totalScore: baseScore + todayPoints,
+          color: dimension.color,
+          isSubCategory: false
         });
       }
     });
