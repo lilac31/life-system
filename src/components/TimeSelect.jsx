@@ -68,13 +68,13 @@ const TimeSelect = ({ value, color, completed = false, estimatedTime, onChange, 
           // 根据时间段确定默认时间（对应用户希望看到的第一个时间）
           let defaultTime = '10:00'; // 默认值
           if (slotId === 'morning') {
-            defaultTime = '09:00'; // 早上从9点开始
+            defaultTime = '08:00'; // 早上默认8点
           } else if (slotId === 'noon') {
-            defaultTime = '12:00'; // 中午从12点开始
+            defaultTime = '13:00'; // 中午默认13点
           } else if (slotId === 'afternoon') {
-            defaultTime = '14:00'; // 下午从14点开始
+            defaultTime = '15:00'; // 下午默认15点
           } else if (slotId === 'evening') {
-            defaultTime = '18:00'; // 晚上从18点开始
+            defaultTime = '19:00'; // 晚上默认19点
           }
           
           const targetButton = dropdownRef.current.querySelector(`button[data-time="${defaultTime}"]`);

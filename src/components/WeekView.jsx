@@ -165,7 +165,8 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange, o
             time: '',
             color: '',
             completed: false,
-            estimatedTime: 0 // 默认预期0小时，需要手动添加
+            estimatedTime: 0, // 默认预期0小时，需要手动添加
+            delayed: false
           }];
         }
       });
@@ -305,7 +306,8 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange, o
         time: '',
         color: '',
         completed: false,
-        estimatedTime: 0
+        estimatedTime: 0,
+        delayed: false
       }];
     }
     
@@ -330,7 +332,8 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange, o
         time: '',
         color: '',
         completed: false,
-        estimatedTime: 0
+        estimatedTime: 0,
+        delayed: false
       });
     }
     
@@ -539,7 +542,8 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange, o
           text: '',
           time: '',
           color: '',
-          completed: false
+          completed: false,
+          delayed: false
         }]
       }
     };
@@ -604,7 +608,8 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange, o
       ...task,
       id: `${dayKey}-${slotId}-${Date.now()}-copy`,
       completed: false,
-      estimatedTime: task.estimatedTime || 0
+      estimatedTime: task.estimatedTime || 0,
+      delayed: false
     };
     
     const newQuickTasks = {
@@ -612,6 +617,28 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange, o
       [dayKey]: {
         ...quickTasks[dayKey],
         [slotId]: [...quickTasks[dayKey][slotId], copiedTask]
+      }
+    };
+    
+    setQuickTasks(newQuickTasks);
+    
+    // 保存到本地存储并触发同步
+    saveWithSync('quickTasks', newQuickTasks);
+    
+    setTaskActionPopup(null);
+  };
+
+  // 切换任务的 delay 状态
+  const toggleTaskDelay = (dayKey, slotId, taskIndex) => {
+    const task = quickTasks[dayKey][slotId][taskIndex];
+    
+    const newQuickTasks = {
+      ...quickTasks,
+      [dayKey]: {
+        ...quickTasks[dayKey],
+        [slotId]: quickTasks[dayKey][slotId].map((t, i) => 
+          i === taskIndex ? { ...t, delayed: !t.delayed } : t
+        )
       }
     };
     
@@ -1076,7 +1103,8 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange, o
                                 dayKey,
                                 slotId: slot.id,
                                 taskIndex: index,
-                                taskData: quickTask
+                                taskData: quickTask,
+                                isDelayed: quickTask.delayed || false
                               });
                             }
                           }}
@@ -1088,7 +1116,10 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange, o
                               ) : 'transparent',
                             position: 'relative',
                             zIndex: 0,
-                            transition: 'all 0.2s ease'
+                            transition: 'all 0.2s ease',
+                            border: quickTask.delayed ? '2px solid #9CA3AF' : 'none',
+                            paddingTop: quickTask.delayed ? '2px' : '4px',
+                            paddingBottom: quickTask.delayed ? '2px' : '4px'
                           }}
                         >
                         {/* 拖拽手柄 - 只在有内容时显示 */}
@@ -1428,7 +1459,7 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange, o
       {/* 任务操作弹窗 */}
       {taskActionPopup && (() => {
         // 计算弹窗位置，确保不超出屏幕边界
-        const popupWidth = 120;
+        const popupWidth = 180;
         const popupHeight = 60;
         const windowWidth = typeof window !== 'undefined' ? window.innerWidth : 1920;
         const windowHeight = typeof window !== 'undefined' ? window.innerHeight : 1080;
@@ -1455,6 +1486,18 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange, o
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
               </svg>
               <span>复制</span>
+            </button>
+            <button
+              onClick={() => toggleTaskDelay(taskActionPopup.dayKey, taskActionPopup.slotId, taskActionPopup.taskIndex)}
+              className={`flex items-center space-x-1 px-2 py-1 text-xs rounded hover:bg-gray-100 transition-colors border ${
+                taskActionPopup.isDelayed 
+                  ? 'bg-gray-50 text-gray-600 border-gray-400' 
+                  : 'bg-yellow-50 text-yellow-600 border-yellow-200'
+              }`}
+              title={taskActionPopup.isDelayed ? '取消延迟标记' : '标记为延迟'}
+            >
+              <span>⏰</span>
+              <span>Delay</span>
             </button>
             <button
               onClick={() => {
