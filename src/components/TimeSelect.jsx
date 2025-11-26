@@ -68,7 +68,7 @@ const TimeSelect = ({ value, color, completed = false, estimatedTime, onChange, 
           // 根据时间段确定默认时间（对应用户希望看到的第一个时间）
           let defaultTime = '10:00'; // 默认值
           if (slotId === 'morning') {
-            defaultTime = '08:00'; // 早上默认8点
+            defaultTime = '10:00'; // 早上默认10点
           } else if (slotId === 'noon') {
             defaultTime = '13:00'; // 中午默认13点
           } else if (slotId === 'afternoon') {
