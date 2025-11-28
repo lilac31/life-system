@@ -138,43 +138,103 @@ const PersonalDashboard = ({ onBack }) => {
 
   // 从云端和 localStorage 加载数据
   useEffect(() => {
-    let dataLoaded = false;
+    // 强制加载默认数据（恢复用户原始数据）
+    const defaultDimensions = [
+      {
+        id: '1',
+        name: '成长挂钩',
+        baseScore: 60,
+        color: '#3B82F6',
+        subCategories: [
+          { id: '101', name: '用户增长', score: 80 },
+          { id: '102', name: '工作增长', score: 40 },
+          { id: '103', name: '工作增长', score: 20 }
+        ]
+      },
+      {
+        id: '2',
+        name: '技能成长',
+        baseScore: 60,
+        color: '#10B981',
+        subCategories: [
+          { id: '201', name: '技术增长', score: 40 },
+          { id: '202', name: '管理增长', score: 30 },
+          { id: '203', name: '业务增长', score: 30 }
+        ]
+      },
+      {
+        id: '3',
+        name: '健康',
+        baseScore: 60,
+        color: '#10B981',
+        subCategories: [
+          { id: '301', name: '身体健康', score: 30 }
+        ]
+      },
+      {
+        id: '4',
+        name: '情感关系',
+        baseScore: 60,
+        color: '#10B981',
+        subCategories: [
+          { id: '401', name: '通友关系', score: 60 },
+          { id: '402', name: '亲密关系', score: 40 },
+          { id: '403', name: '家庭关系', score: 30 }
+        ]
+      },
+      {
+        id: '5',
+        name: '成就感',
+        baseScore: 60,
+        color: '#F59E0B',
+        subCategories: [
+          { id: '501', name: '成就感', score: 40 },
+          { id: '502', name: '被尊重', score: 60 }
+        ]
+      },
+      {
+        id: '6',
+        name: '心理成长',
+        baseScore: 60,
+        color: '#8B5CF6',
+        subCategories: [
+          { id: '601', name: '小目标完成', score: 20 }
+        ]
+      }
+    ];
     
-    // 首先尝试从 life-system 的云端数据加载
+    // 直接设置默认数据
+    setDimensions(defaultDimensions);
+    localStorage.setItem('growthDimensions', JSON.stringify(defaultDimensions));
+    
+    // 同步到云端
     try {
       const allData = dataAPI.getAllData();
-      const dashboardData = allData.personalDashboard || {};
-      
-      // 使用云端数据（如果存在）
-      if (dashboardData.growthDimensions && dashboardData.growthDimensions.length > 0) {
-        setDimensions(dashboardData.growthDimensions);
-        localStorage.setItem('growthDimensions', JSON.stringify(dashboardData.growthDimensions));
-        dataLoaded = true;
-      }
-      
-      if (dashboardData.growthDiaries && dashboardData.growthDiaries.length > 0) {
-        setDiaryEntries(dashboardData.growthDiaries);
-        localStorage.setItem('growthDiaries', JSON.stringify(dashboardData.growthDiaries));
-      }
-      
-      if (dashboardData.growthEnergyRecords && dashboardData.growthEnergyRecords.length > 0) {
-        setEnergyRecords(dashboardData.growthEnergyRecords);
-        localStorage.setItem('growthEnergyRecords', JSON.stringify(dashboardData.growthEnergyRecords));
-        
-        // 检查今天是否已记录
-        const today = format(new Date(), 'yyyy-MM-dd');
-        const todayRecord = dashboardData.growthEnergyRecords.find(r => r.date === today);
-        if (todayRecord) {
-          setTodayEnergy(todayRecord.level);
-        }
-      }
+      allData.personalDashboard = {
+        ...allData.personalDashboard,
+        growthDimensions: defaultDimensions
+      };
+      dataAPI.saveData(allData);
     } catch (error) {
-      console.warn('从云端加载数据失败，使用本地数据:', error);
+      console.warn('云端同步失败:', error);
     }
     
-    // 如果没有云端数据，从 localStorage 加载
-    if (!dataLoaded) {
-      loadFromLocalStorage();
+    // 加载日记数据
+    const savedDiaries = localStorage.getItem('growthDiaries');
+    if (savedDiaries) {
+      setDiaryEntries(JSON.parse(savedDiaries));
+    }
+    
+    // 加载能量记录
+    const savedEnergyRecords = localStorage.getItem('growthEnergyRecords');
+    if (savedEnergyRecords) {
+      const records = JSON.parse(savedEnergyRecords);
+      setEnergyRecords(records);
+      const today = format(new Date(), 'yyyy-MM-dd');
+      const todayRecord = records.find(r => r.date === today);
+      if (todayRecord) {
+        setTodayEnergy(todayRecord.level);
+      }
     }
   }, []);
 
@@ -531,9 +591,9 @@ const PersonalDashboard = ({ onBack }) => {
       return;
     }
     
-    const apiKey = import.meta.env.VITE_DEEPSEEK_API_KEY;
-    if (!apiKey || apiKey === 'your-deepseek-api-key-here') {
-      alert('请先在 .env 文件中配置 VITE_DEEPSEEK_API_KEY');
+    const apiKey = import.meta.env.VITE_ZHIPU_API_KEY;
+    if (!apiKey) {
+      alert('请先在 .env 文件中配置 VITE_ZHIPU_API_KEY');
       return;
     }
     
@@ -552,14 +612,14 @@ const PersonalDashboard = ({ onBack }) => {
         return { name: d.name, subCategories: [] };
       });
       
-      const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
+      const response = await fetch('https://open.bigmodel.cn/api/paas/v4/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${apiKey}`
         },
         body: JSON.stringify({
-          model: 'deepseek-chat',
+          model: 'glm-4-flash',
           messages: [
             {
               role: 'system',
@@ -595,7 +655,21 @@ const PersonalDashboard = ({ onBack }) => {
         })
       });
       
+      // 检查 HTTP 响应状态
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('API 错误响应:', errorData);
+        
+        // 特殊处理余额不足错误
+        if (response.status === 402) {
+          throw new Error('API Key 余额不足，请充值账户');
+        }
+        
+        throw new Error(`API 请求失败 (${response.status}): ${errorData.error?.message || errorData.message || '未知错误'}`);
+      }
+      
       const data = await response.json();
+      console.log('AI 返回数据:', data);
       
       if (data.choices && data.choices[0]) {
         const content = data.choices[0].message.content;
@@ -612,14 +686,16 @@ const PersonalDashboard = ({ onBack }) => {
           setAiSuggestion(suggestion);
         } catch (e) {
           console.error('JSON 解析失败:', e);
+          console.error('原始内容:', content);
           // 如果不是标准 JSON，显示原始内容
           setAiSuggestion({ raw: content });
         }
       } else {
+        console.error('完整返回数据:', data);
         throw new Error('AI 返回数据格式错误');
       }
     } catch (error) {
-      console.error('AI 分析失败:', error);
+      console.error('AI 分析失败详情:', error);
       alert(`AI 分析失败: ${error.message}\n请检查网络连接或 API Key 是否正确`);
     } finally {
       setIsAnalyzing(false);
@@ -942,20 +1018,6 @@ const PersonalDashboard = ({ onBack }) => {
                     height: '100%',
                     position: 'relative'
                   }}>
-                    {/* 分数标签 */}
-                    {item.todayPoints > 0 && (
-                      <div style={{
-                        position: 'absolute',
-                        top: `${100 - baseHeight - todayHeight - 5}%`,
-                        fontSize: '10px',
-                        color: '#10B981',
-                        fontWeight: 'bold',
-                        whiteSpace: 'nowrap'
-                      }}>
-                        +{item.todayPoints}
-                      </div>
-                    )}
-                    
                     {/* 柱状图容器 - 从底部开始 */}
                     <div style={{
                       width: '100%',
@@ -963,8 +1025,28 @@ const PersonalDashboard = ({ onBack }) => {
                       display: 'flex',
                       flexDirection: 'column',
                       justifyContent: 'flex-end',
-                      alignItems: 'center'
+                      alignItems: 'center',
+                      position: 'relative'
                     }}>
+                      {/* 今日增加分数标签 - 放在柱子上方 */}
+                      {item.todayPoints > 0 && (
+                        <div style={{
+                          position: 'absolute',
+                          bottom: `${baseHeight + todayHeight + 2}%`,
+                          fontSize: '10px',
+                          color: '#10B981',
+                          fontWeight: 'bold',
+                          whiteSpace: 'nowrap',
+                          backgroundColor: 'white',
+                          padding: '2px 4px',
+                          borderRadius: '3px',
+                          boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
+                          zIndex: 10
+                        }}>
+                          +{item.todayPoints}
+                        </div>
+                      )}
+                      
                       {/* 今日增加分数（半透明层） */}
                       {item.todayPoints > 0 && (
                         <div style={{
