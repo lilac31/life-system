@@ -25,6 +25,7 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange, o
   const [taskTimeRecords, setTaskTimeRecords] = useState({});
   const [taskActionPopup, setTaskActionPopup] = useState(null);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [okrData, setOkrData] = useState(null); // OKR数据
   
   // 时间编辑和颜色高亮相关
   const [isTimeEditModalOpen, setIsTimeEditModalOpen] = useState(false);
@@ -136,6 +137,16 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange, o
     const savedTotalHours = localStorage.getItem('totalWorkingHours');
     if (savedTotalHours) {
       setTotalWorkingHours(parseInt(savedTotalHours, 10));
+    }
+    
+    // 加载OKR数据
+    const savedOkr = localStorage.getItem('okrData');
+    if (savedOkr) {
+      try {
+        setOkrData(JSON.parse(savedOkr));
+      } catch (e) {
+        console.error('Failed to parse okrData:', e);
+      }
     }
     
     setIsInitialized(true);
@@ -683,6 +694,25 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange, o
     const hours = Math.floor(minutes / 60);
     const remainingMinutes = minutes % 60;
     return remainingMinutes > 0 ? `${hours}小时${remainingMinutes}分钟` : `${hours}小时`;
+  };
+
+  // 获取OKR显示文本
+  const getOkrDisplayText = (okr) => {
+    if (!okr || !okrData) return null;
+    
+    // 待思考
+    if (okr.objectiveId === 'pending' && okr.keyResultId === 'pending') {
+      return '💭 待思考';
+    }
+    
+    // 查找对应的O和KR
+    const objective = okrData.objectives?.find(o => o.id === okr.objectiveId);
+    if (!objective) return null;
+    
+    const kr = objective.keyResults?.find(k => k.id === okr.keyResultId);
+    if (!kr) return null;
+    
+    return `${objective.name} - ${kr.description || '未命名'}`;
   };
 
   // 计算本周时间统计
@@ -1255,7 +1285,7 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange, o
                               onChange={(e) => {
                                 updateQuickTask(dayKey, slot.id, index, 'text', e.target.value);
                               }}
-                              className={`flex-1 text-xs p-1 border-none focus:outline-none bg-transparent resize-none overflow-hidden break-words ${
+                              className={`flex-1 w-full text-xs p-1 border-none focus:outline-none bg-transparent resize-none overflow-hidden break-words ${
                                 (highlightedColor && quickTask.color === highlightedColor) 
                                   ? 'text-gray-900' 
                                   : (quickTask.completed ? 'line-through text-gray-500' : 'text-gray-900')
@@ -1263,7 +1293,7 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange, o
                               onClick={(e) => e.stopPropagation()}
                               onDragStart={(e) => e.preventDefault()}
                               rows={1}
-                              style={{ minHeight: '20px', maxHeight: '60px', width: '100%', boxSizing: 'border-box' }}
+                              style={{ minHeight: '20px', maxHeight: '60px', boxSizing: 'border-box' }}
                               onInput={(e) => {
                                 // 自动调整高度
                                 e.target.style.height = 'auto';
@@ -1271,6 +1301,13 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange, o
                               }}
                             />
                           </div>
+                          
+                          {/* OKR信息显示 - 绝对定位贴底，不占空间 */}
+                          {quickTask.okr && getOkrDisplayText(quickTask.okr) && (
+                            <div className="absolute right-1 bottom-0.5 text-[8px] text-gray-400 leading-none truncate pointer-events-none" style={{ left: '87px' }}>
+                              {getOkrDisplayText(quickTask.okr)}
+                            </div>
+                          )}
                           
                           {/* 时间标记 - 只在高亮且有明确时间记录时显示 */}
                           {highlightedColor && quickTask.color === highlightedColor && getTaskTimeRecord(quickTask.id) > 0 && (
