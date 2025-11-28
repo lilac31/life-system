@@ -4,7 +4,6 @@ import { ChevronUp, ChevronDown, Star, Cloud, CloudOff, AlertCircle, Settings, R
 import { format, startOfWeek, addDays, addWeeks, subWeeks, isSameDay } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 import TimeSelect from './TimeSelect';
-import OKRSelect from './OKRSelect';
 import Navigation from './Navigation';
 import TimeEditModal from './TimeEditModal';
 import DataManager from './DataManager';
@@ -1229,17 +1228,12 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange, o
                               onChange={(time) => updateQuickTask(dayKey, slot.id, index, 'time', time)}
                               onColorChange={(color) => updateQuickTask(dayKey, slot.id, index, 'color', color)}
                               onEstimatedTimeChange={(hours) => updateQuickTask(dayKey, slot.id, index, 'estimatedTime', hours)}
+                              okrValue={quickTask.okr}
+                              onOkrChange={(okr) => updateQuickTask(dayKey, slot.id, index, 'okr', okr)}
                             />
                           </div>
                           
-                          {/* OKR选择器区域 */}
-                          <div className="flex-shrink-0 ml-1" style={{ position: 'relative', zIndex: 8500 }} onDragStart={(e) => e.preventDefault()}>
-                            <OKRSelect
-                              value={quickTask.okr}
-                              onChange={(okr) => updateQuickTask(dayKey, slot.id, index, 'okr', okr)}
-                            />
-                          </div>
-                          
+
                           {/* 分隔线 - 只在没有选择时间时显示 */}
                           {!quickTask.time && (
                             <div className={`w-px h-4 ml-1 mr-2 flex-shrink-0 ${

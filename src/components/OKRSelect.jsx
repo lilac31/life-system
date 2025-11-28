@@ -108,24 +108,26 @@ const OKRSelect = ({ value, onChange, className = "" }) => {
       <button
         ref={buttonRef}
         onClick={handleToggle}
-        className={`flex items-center space-x-1 px-2 py-1 text-xs rounded border transition-colors ${
+        className={`flex items-center space-x-1 px-3 py-1.5 text-sm rounded border transition-colors w-full justify-between ${
           value 
             ? 'bg-purple-50 border-purple-300 text-purple-700 hover:bg-purple-100' 
             : 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100'
         }`}
         title={display ? `${display.obj.name}${display.kr ? ` - ${display.kr.description}` : ' - 待思考'}` : '选择OKR目标'}
       >
-        <Target size={12} />
-        {display ? (
-          <span className="max-w-[80px] truncate">
-            {display.obj.name.substring(0, 1)}
-            {display.kr && `-${display.kr.description.substring(0, 3)}`}
-            {!display.kr && '-待'}
-          </span>
-        ) : (
-          <span>OKR</span>
-        )}
-        <ChevronDown size={10} />
+        <div className="flex items-center space-x-1">
+          <Target size={14} />
+          {display ? (
+            <span className="truncate">
+              {display.obj.name}
+              {display.kr && ` - ${display.kr.description}`}
+              {!display.kr && ' - 待思考'}
+            </span>
+          ) : (
+            <span>选择OKR</span>
+          )}
+        </div>
+        <ChevronDown size={12} />
       </button>
 
       {isOpen && createPortal(
@@ -135,60 +137,69 @@ const OKRSelect = ({ value, onChange, className = "" }) => {
           style={{
             top: `${dropdownPosition.top}px`,
             left: `${dropdownPosition.left}px`,
-            width: '200px',
-            maxHeight: '250px',
+            width: '320px',
+            maxHeight: '400px',
             zIndex: 10001
           }}
         >
           {okrData && okrData.objectives && okrData.objectives.length > 0 ? (
-            <div className="overflow-y-auto max-h-[250px]">
+            <div className="overflow-y-auto max-h-[400px]">
               {okrData.objectives.map((objective) => (
-                <div key={objective.id} className="border-b border-gray-100 last:border-b-0">
-                  {/* 目标标题 */}
-                  <div
-                    className="px-3 py-2 bg-gray-50 font-medium text-xs flex items-center space-x-2"
-                    style={{ color: objective.color }}
-                  >
-                    <Target size={12} />
-                    <span>{objective.name}</span>
-                  </div>
-                  
-                  {/* 关键结果列表 */}
-                  {objective.keyResults && objective.keyResults.length > 0 ? (
+                <div key={objective.id}>
+                  {/* 显示每个KR */}
+                  {objective.keyResults && objective.keyResults.length > 0 && (
                     objective.keyResults.map((kr) => (
                       <button
                         key={kr.id}
                         onClick={() => handleSelect(objective.id, kr.id)}
-                        className={`w-full text-left px-4 py-2 text-xs hover:bg-purple-50 transition-colors ${
+                        className={`w-full text-left px-4 py-2.5 text-sm hover:bg-purple-50 transition-colors border-b border-gray-100 ${
                           value?.objectiveId === objective.id && value?.keyResultId === kr.id
                             ? 'bg-purple-100 text-purple-700 font-medium'
                             : 'text-gray-700'
                         }`}
                       >
-                        <div className="truncate">{kr.description || '未命名KR'}</div>
-                        {kr.target && (
-                          <div className="text-[10px] text-gray-500 mt-0.5">
-                            目标: {kr.target}{kr.unit}
+                        <div className="flex items-start space-x-2">
+                          <div 
+                            className="flex-shrink-0 w-1.5 h-1.5 rounded-full mt-1.5"
+                            style={{ backgroundColor: objective.color }}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium">
+                              <span style={{ color: objective.color }}>{objective.name}</span>
+                              <span className="text-gray-400 mx-1">-</span>
+                              <span>{kr.description || '未命名KR'}</span>
+                            </div>
+                            {kr.target && (
+                              <div className="text-xs text-gray-500 mt-0.5">
+                                目标: {kr.current || 0} / {kr.target}{kr.unit}
+                              </div>
+                            )}
                           </div>
-                        )}
+                        </div>
                       </button>
                     ))
-                  ) : (
-                    <div className="px-4 py-2 text-xs text-gray-400 italic">
-                      暂无KR
-                    </div>
                   )}
                   
                   {/* 待思考选项 */}
                   <button
                     onClick={() => handleSelect(objective.id, 'pending')}
-                    className={`w-full text-left px-4 py-2 text-xs hover:bg-orange-50 transition-colors border-t border-gray-100 ${
+                    className={`w-full text-left px-4 py-2.5 text-sm hover:bg-orange-50 transition-colors border-b border-gray-100 ${
                       value?.objectiveId === objective.id && value?.keyResultId === 'pending'
                         ? 'bg-orange-100 text-orange-700 font-medium'
                         : 'text-orange-600'
                     }`}
                   >
-                    💭 待思考
+                    <div className="flex items-start space-x-2">
+                      <div 
+                        className="flex-shrink-0 w-1.5 h-1.5 rounded-full mt-1.5"
+                        style={{ backgroundColor: objective.color }}
+                      />
+                      <div className="flex-1">
+                        <span style={{ color: objective.color }}>{objective.name}</span>
+                        <span className="text-gray-400 mx-1">-</span>
+                        <span>💭 待思考</span>
+                      </div>
+                    </div>
                   </button>
                 </div>
               ))}
@@ -197,16 +208,16 @@ const OKRSelect = ({ value, onChange, className = "" }) => {
               {value && (
                 <button
                   onClick={handleClear}
-                  className="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50 transition-colors border-t border-gray-200"
+                  className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors border-t-2 border-gray-200"
                 >
                   ✕ 清除选择
                 </button>
               )}
             </div>
           ) : (
-            <div className="p-4 text-xs text-gray-500 text-center">
+            <div className="p-4 text-sm text-gray-500 text-center">
               <p>暂无OKR数据</p>
-              <p className="mt-1 text-[10px]">请先在OKR页面创建目标</p>
+              <p className="mt-1 text-xs">请先在OKR页面创建目标</p>
             </div>
           )}
         </div>,

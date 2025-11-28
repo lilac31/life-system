@@ -1,10 +1,24 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 
-const TimeSelect = ({ value, color, completed = false, estimatedTime, onChange, onColorChange, onEstimatedTimeChange, className = "", slotId = "" }) => {
+const TimeSelect = ({ value, color, completed = false, estimatedTime, onChange, onColorChange, onEstimatedTimeChange, className = "", slotId = "", okrValue, onOkrChange }) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
   const buttonRef = useRef(null);
+  const [okrData, setOkrData] = useState(null);
+
+  // 加载OKR数据
+  useEffect(() => {
+    const savedOkr = localStorage.getItem('okrData');
+    if (savedOkr) {
+      try {
+        const data = JSON.parse(savedOkr);
+        setOkrData(data);
+      } catch (e) {
+        console.error('Failed to load OKR data:', e);
+      }
+    }
+  }, [isOpen]); // 每次打开时重新加载
 
   const colors = [
     { name: '红色', value: 'red', bg: 'bg-red-500', text: 'text-red-600', letter: 'M' },
@@ -108,8 +122,8 @@ const TimeSelect = ({ value, color, completed = false, estimatedTime, onChange, 
 
   const handleTimeSelect = (time) => {
     onChange(time);
-    // 选择时间后自动关闭面板
-    setTimeout(() => setIsOpen(false), 100);
+    // 不自动关闭面板，让用户选择OKR
+    // setTimeout(() => setIsOpen(false), 100);
   };
 
   const clearTime = () => {
@@ -188,7 +202,7 @@ const TimeSelect = ({ value, color, completed = false, estimatedTime, onChange, 
             position: 'fixed'
           }}
         >
-          {/* 上半部分：颜色和时间选择 */}
+          {/* 上半部分：颜色、时间和OKR选择 */}
           <div className="flex" style={{ backgroundColor: '#ffffff', position: 'relative', zIndex: 9000 }}>
             {/* 颜色选择区域 */}
             <div className="w-20 p-2 border-r border-gray-200" style={{ backgroundColor: '#ffffff', position: 'relative', zIndex: 9000 }}>
@@ -211,7 +225,7 @@ const TimeSelect = ({ value, color, completed = false, estimatedTime, onChange, 
             </div>
             
             {/* 时间选择区域 */}
-            <div className="w-20 max-h-56 overflow-y-auto" style={{ backgroundColor: '#ffffff', position: 'relative', zIndex: 9000 }}>
+            <div className="w-20 max-h-56 overflow-y-auto border-r border-gray-200" style={{ backgroundColor: '#ffffff', position: 'relative', zIndex: 9000 }}>
               <button
                 onClick={clearTime}
                 className="w-full text-left px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 border-b border-gray-200"
@@ -233,6 +247,94 @@ const TimeSelect = ({ value, color, completed = false, estimatedTime, onChange, 
                 </button>
               ))}
             </div>
+
+            {/* OKR选择区域 */}
+            {onOkrChange && (
+              <div className="w-64" style={{ backgroundColor: '#ffffff', position: 'relative', zIndex: 9000 }}>
+                <div className="bg-white border-b border-gray-200 px-2 py-1 text-xs text-gray-500 font-medium">
+                  OKR
+                </div>
+                {okrData && okrData.objectives && okrData.objectives.length > 0 ? (
+                  <div className="p-2 space-y-1.5">
+                    {/* 每个O和它的KR占一行 */}
+                    {okrData.objectives.map((objective) => (
+                      <div key={objective.id} className="flex flex-wrap gap-1 items-center">
+                        {/* 一级分类（O）标签 */}
+                        <div className="flex items-center space-x-1 px-1.5 py-0.5 rounded" style={{ backgroundColor: `${objective.color}15` }}>
+                          <div 
+                            className="w-1 h-1 rounded-full"
+                            style={{ backgroundColor: objective.color }}
+                          />
+                          <span 
+                            className="text-[11px] font-medium"
+                            style={{ color: objective.color }}
+                          >
+                            {objective.name}
+                          </span>
+                        </div>
+                        
+                        {/* 二级分类（KR）紧跟在后面 */}
+                        {objective.keyResults && objective.keyResults.length > 0 && (
+                          objective.keyResults.map((kr) => (
+                            <button
+                              key={kr.id}
+                              onClick={() => {
+                                onOkrChange({ objectiveId: objective.id, keyResultId: kr.id });
+                                setTimeout(() => setIsOpen(false), 100);
+                              }}
+                              className={`px-1.5 py-0.5 rounded text-[11px] transition-all ${
+                                okrValue?.objectiveId === objective.id && okrValue?.keyResultId === kr.id
+                                  ? 'bg-purple-500 text-white font-medium'
+                                  : 'bg-gray-100 text-gray-700 hover:bg-purple-100 hover:text-purple-700'
+                              }`}
+                              title={kr.target ? `${kr.current || 0}/${kr.target}${kr.unit}` : ''}
+                              style={{ position: 'relative', zIndex: 9000 }}
+                            >
+                              {kr.description || '未命名'}
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    ))}
+                    
+                    {/* 待思考和清除按钮单独一行 */}
+                    <div className="flex gap-1 items-center pt-1">
+                      <button
+                        onClick={() => {
+                          onOkrChange({ objectiveId: 'pending', keyResultId: 'pending' });
+                          setTimeout(() => setIsOpen(false), 100);
+                        }}
+                        className={`px-1.5 py-0.5 rounded text-[11px] transition-all ${
+                          okrValue?.objectiveId === 'pending' && okrValue?.keyResultId === 'pending'
+                            ? 'bg-orange-500 text-white font-medium'
+                            : 'bg-orange-100 text-orange-600 hover:bg-orange-200'
+                        }`}
+                        style={{ position: 'relative', zIndex: 9000 }}
+                      >
+                        💭 待思考
+                      </button>
+                      
+                      {okrValue && (
+                        <button
+                          onClick={() => {
+                            onOkrChange(null);
+                            setTimeout(() => setIsOpen(false), 100);
+                          }}
+                          className="px-1.5 py-0.5 rounded text-[11px] text-red-600 hover:bg-red-50 transition-colors"
+                          style={{ position: 'relative', zIndex: 9000 }}
+                        >
+                          ✕ 清除
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3 text-xs text-gray-400 text-center">
+                    暂无OKR
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* 下半部分：预期时长选择 */}
