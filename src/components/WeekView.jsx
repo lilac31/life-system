@@ -4,6 +4,7 @@ import { ChevronUp, ChevronDown, Star, Cloud, CloudOff, AlertCircle, Settings, R
 import { format, startOfWeek, addDays, addWeeks, subWeeks, isSameDay } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 import TimeSelect from './TimeSelect';
+import OKRSelect from './OKRSelect';
 import Navigation from './Navigation';
 import TimeEditModal from './TimeEditModal';
 import DataManager from './DataManager';
@@ -166,7 +167,8 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange, o
             color: '',
             completed: false,
             estimatedTime: 0, // 默认预期0小时，需要手动添加
-            delayed: false
+            delayed: false,
+            okr: null // OKR关联：{ objectiveId, keyResultId }
           }];
         }
       });
@@ -307,7 +309,8 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange, o
         color: '',
         completed: false,
         estimatedTime: 0,
-        delayed: false
+        delayed: false,
+        okr: null
       }];
     }
     
@@ -333,7 +336,8 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange, o
         color: '',
         completed: false,
         estimatedTime: 0,
-        delayed: false
+        delayed: false,
+        okr: null
       });
     }
     
@@ -1225,6 +1229,14 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange, o
                               onChange={(time) => updateQuickTask(dayKey, slot.id, index, 'time', time)}
                               onColorChange={(color) => updateQuickTask(dayKey, slot.id, index, 'color', color)}
                               onEstimatedTimeChange={(hours) => updateQuickTask(dayKey, slot.id, index, 'estimatedTime', hours)}
+                            />
+                          </div>
+                          
+                          {/* OKR选择器区域 */}
+                          <div className="flex-shrink-0 ml-1" style={{ position: 'relative', zIndex: 8500 }} onDragStart={(e) => e.preventDefault()}>
+                            <OKRSelect
+                              value={quickTask.okr}
+                              onChange={(okr) => updateQuickTask(dayKey, slot.id, index, 'okr', okr)}
                             />
                           </div>
                           

@@ -5,8 +5,8 @@ const Navigation = ({ currentView, onViewChange }) => {
   const views = [
     { id: 'week', name: '周视图' },
     { id: 'year', name: '年视图' },
-    { id: 'management', name: '管理界面' },
-    { id: 'life', name: '人生', externalLink: 'https://z28332x6mn.feishu.cn/wiki/Styiw1ghri3ufxk0KdscaHYcnWf?fromScene=spaceOverview' },
+    { id: 'management', name: 'OKR' },
+    { id: 'life', name: '生命时间轴', externalLink: 'https://z28332x6mn.feishu.cn/wiki/Styiw1ghri3ufxk0KdscaHYcnWf?fromScene=spaceOverview' },
     { id: 'reading', name: '阅读和观影', externalLink: 'https://z28332x6mn.feishu.cn/wiki/ZcuBw5Saoi5SuAkKFyjcuXLrnge?table=tbla5V81HtkXZqrP&view=vewUiR9Gc5' },
     { id: 'e', name: 'E', externalLink: '' },
     { id: 'x', name: 'X', externalLink: '' },
