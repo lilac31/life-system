@@ -221,6 +221,7 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange, o
   const mouseTrackingRef = useRef(false);
   const closeTimeoutRef = useRef(null);
   const syncTimeoutRef = useRef(null);
+  const isProcessingDropRef = useRef(false); // 防止重复处理drop事件
 
   // 保存数据并触发同步的辅助函数
   const saveWithSync = (key, value) => {
@@ -439,6 +440,11 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange, o
     setDraggedTask(null);
     setDragOverCell(null);
     setDragOverTask(null);
+    
+    // 延迟重置处理标记，确保drop事件已完成
+    setTimeout(() => {
+      isProcessingDropRef.current = false;
+    }, 200);
   };
 
   const handleDragOver = (e, dayKey, slotId) => {
@@ -453,10 +459,21 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange, o
 
   const handleDrop = (e, targetDayKey, targetSlotId, targetTaskIndex = null) => {
     e.preventDefault();
+    e.stopPropagation();
+    
+    // 防止重复处理drop事件
+    if (isProcessingDropRef.current) {
+      console.log('⚠️ 已在处理drop，跳过重复事件');
+      return;
+    }
+    
     setDragOverCell(null);
     setDragOverTask(null);
     
     if (!draggedTask) return;
+    
+    // 标记开始处理
+    isProcessingDropRef.current = true;
     
     const { task, sourceDayKey, sourceSlotId, sourceTaskIndex } = draggedTask;
     
@@ -465,6 +482,7 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange, o
       // 如果是拖到同一位置，不做任何操作
       if (targetTaskIndex === null || sourceTaskIndex === targetTaskIndex) {
         setDraggedTask(null);
+        isProcessingDropRef.current = false;
         return;
       }
       
@@ -485,6 +503,11 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange, o
       setQuickTasks(newQuickTasks);
       saveWithSync('quickTasks', newQuickTasks);
       setDraggedTask(null);
+      
+      // 延迟重置标记，避免状态更新冲突
+      setTimeout(() => {
+        isProcessingDropRef.current = false;
+      }, 100);
       return;
     }
     
@@ -494,7 +517,10 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange, o
       ...task,
       id: `${targetDayKey}-${targetSlotId}-${Date.now()}`,
       completed: task.completed, // 保持原有的完成状态
-      estimatedTime: task.estimatedTime || 0
+      estimatedTime: task.estimatedTime || 0,
+      actualTime: task.actualTime || 0,
+      delayed: task.delayed || false,
+      okr: task.okr || null
     };
     
     // 从源位置删除任务 - 先保存原始任务ID用于过滤
@@ -509,12 +535,15 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange, o
         time: '',
         color: '',
         completed: false,
-        estimatedTime: 0
+        estimatedTime: 0,
+        actualTime: 0,
+        delayed: false,
+        okr: null
       });
     }
     
     // 确保目标位置有数据结构，并过滤掉可能存在的重复任务
-    const targetTasks = (quickTasks[targetDayKey]?.[targetSlotId] || []).filter(t => t.id !== originalTaskId);
+    const targetTasks = (quickTasks[targetDayKey]?.[targetSlotId] || []).filter(t => t.id !== originalTaskId && t.id !== newTask.id);
     
     // 如果指定了目标任务索引，插入到该位置；否则插入到最后一个非空任务后
     let insertIndex;
@@ -547,6 +576,11 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange, o
     saveWithSync('quickTasks', newQuickTasks);
     
     setDraggedTask(null);
+    
+    // 延迟重置标记，避免状态更新冲突
+    setTimeout(() => {
+      isProcessingDropRef.current = false;
+    }, 100);
   };
 
   const addQuickTaskLine = (dayKey, slotId) => {
@@ -1179,7 +1213,13 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange, o
                             position: 'relative',
                             zIndex: 0,
                             transition: 'all 0.2s ease',
-                            border: quickTask.delayed ? '2px solid #9CA3AF' : 'none',
+                            // 拖动指示线优先级最高
+                            borderTop: dragOverTask && dragOverTask.dayKey === dayKey && dragOverTask.slotId === slot.id && dragOverTask.taskIndex === index 
+                              ? '2px solid #3B82F6' 
+                              : 'none',
+                            borderLeft: quickTask.delayed ? '2px solid #9CA3AF' : 'none',
+                            borderRight: quickTask.delayed ? '2px solid #9CA3AF' : 'none',
+                            borderBottom: quickTask.delayed ? '2px solid #9CA3AF' : 'none',
                             paddingTop: quickTask.delayed ? '2px' : '4px',
                             paddingBottom: quickTask.delayed ? '2px' : '4px'
                           }}
