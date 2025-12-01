@@ -177,6 +177,7 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange, o
             color: '',
             completed: false,
             estimatedTime: 0, // 默认预期0小时，需要手动添加
+            actualTime: 0, // 实际完成时间
             delayed: false,
             okr: null // OKR关联：{ objectiveId, keyResultId }
           }];
@@ -319,6 +320,7 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange, o
         color: '',
         completed: false,
         estimatedTime: 0,
+        actualTime: 0,
         delayed: false,
         okr: null
       }];
@@ -346,6 +348,7 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange, o
         color: '',
         completed: false,
         estimatedTime: 0,
+        actualTime: 0,
         delayed: false,
         okr: null
       });
@@ -557,7 +560,10 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange, o
           time: '',
           color: '',
           completed: false,
-          delayed: false
+          estimatedTime: 0,
+          actualTime: 0,
+          delayed: false,
+          okr: null
         }]
       }
     };
@@ -596,6 +602,18 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange, o
       [taskId]: (taskTimeRecords[taskId] || 0) + timeSpent
     };
     setTaskTimeRecords(newTaskTimeRecords);
+    
+    // 同时更新任务的 actualTime 字段（将分钟转为小时）
+    if (timeTrackingPopup) {
+      const { dayKey, slotId, taskIndex } = timeTrackingPopup;
+      const task = quickTasks[dayKey]?.[slotId]?.[taskIndex];
+      if (task) {
+        const currentActualTime = task.actualTime || 0;
+        const newActualTime = currentActualTime + (timeSpent / 60); // 转换为小时
+        updateQuickTask(dayKey, slotId, taskIndex, 'actualTime', newActualTime);
+      }
+    }
+    
     setTimeTrackingPopup(null);
     
     // 保存时间记录到本地存储并触发同步
@@ -609,6 +627,16 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange, o
     };
     delete newTaskTimeRecords[taskId];
     setTaskTimeRecords(newTaskTimeRecords);
+    
+    // 同时清空任务的 actualTime 字段
+    if (timeTrackingPopup) {
+      const { dayKey, slotId, taskIndex } = timeTrackingPopup;
+      const task = quickTasks[dayKey]?.[slotId]?.[taskIndex];
+      if (task) {
+        updateQuickTask(dayKey, slotId, taskIndex, 'actualTime', 0);
+      }
+    }
+    
     setTimeTrackingPopup(null);
     
     // 保存时间记录到本地存储并触发同步
@@ -623,6 +651,7 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange, o
       id: `${dayKey}-${slotId}-${Date.now()}-copy`,
       completed: false,
       estimatedTime: task.estimatedTime || 0,
+      actualTime: 0,
       delayed: false
     };
     
@@ -1155,22 +1184,49 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange, o
                             paddingBottom: quickTask.delayed ? '2px' : '4px'
                           }}
                         >
-                        {/* 预期时间标签 - 左上角显示 */}
-                        {hasContent && quickTask.estimatedTime > 0 && (
-                          <div 
-                            className={`absolute top-0 left-0 text-[8px] font-bold px-0.5 py-0.5 rounded-br ${
-                              quickTask.color ? getColorClasses(quickTask.color).bg : 'bg-gray-500'
-                            } text-white leading-none`}
-                            style={{ 
-                              zIndex: 1,
-                              lineHeight: '0.8',
-                              minWidth: '14px',
-                              textAlign: 'center',
-                              fontSize: '7px'
-                            }}
-                            title={`预期时长: ${quickTask.estimatedTime}小时`}
-                          >
-                            {quickTask.estimatedTime}h
+                        {/* 时间标签组 - 左上角显示 */}
+                        {hasContent && (quickTask.estimatedTime > 0 || quickTask.actualTime > 0) && (
+                          <div className="absolute top-0 left-0 flex items-center gap-0.5" style={{ zIndex: 1 }}>
+                            {/* 预期时间标签 - 有透明度 */}
+                            {quickTask.estimatedTime > 0 && (
+                              <div 
+                                className={`text-[8px] font-bold px-0.5 py-0.5 rounded-br ${
+                                  quickTask.color ? getColorClasses(quickTask.color).bg : 'bg-gray-500'
+                                } text-white leading-none opacity-60`}
+                                style={{ 
+                                  lineHeight: '0.8',
+                                  minWidth: '14px',
+                                  textAlign: 'center',
+                                  fontSize: '7px'
+                                }}
+                                title={`预期时长: ${quickTask.estimatedTime}小时`}
+                              >
+                                {quickTask.estimatedTime}h
+                              </div>
+                            )}
+                            
+                            {/* 箭头 */}
+                            {quickTask.estimatedTime > 0 && quickTask.actualTime > 0 && (
+                              <span className="text-[7px] text-gray-400">→</span>
+                            )}
+                            
+                            {/* 完成时间标签 - 无透明度 */}
+                            {quickTask.actualTime > 0 && (
+                              <div 
+                                className={`text-[8px] font-bold px-0.5 py-0.5 rounded ${
+                                  quickTask.color ? getColorClasses(quickTask.color).bg : 'bg-gray-500'
+                                } text-white leading-none`}
+                                style={{ 
+                                  lineHeight: '0.8',
+                                  minWidth: '14px',
+                                  textAlign: 'center',
+                                  fontSize: '7px'
+                                }}
+                                title={`实际完成时长: ${quickTask.actualTime}小时`}
+                              >
+                                {quickTask.actualTime}h
+                              </div>
+                            )}
                           </div>
                         )}
                         
