@@ -1155,6 +1155,25 @@ const WeekView = ({ tasks, onAddTask, onUpdateTask, currentView, onViewChange, o
                             paddingBottom: quickTask.delayed ? '2px' : '4px'
                           }}
                         >
+                        {/* 预期时间标签 - 左上角显示 */}
+                        {hasContent && quickTask.estimatedTime > 0 && (
+                          <div 
+                            className={`absolute top-0 left-0 text-[8px] font-bold px-0.5 py-0.5 rounded-br ${
+                              quickTask.color ? getColorClasses(quickTask.color).bg : 'bg-gray-500'
+                            } text-white leading-none`}
+                            style={{ 
+                              zIndex: 1,
+                              lineHeight: '0.8',
+                              minWidth: '14px',
+                              textAlign: 'center',
+                              fontSize: '7px'
+                            }}
+                            title={`预期时长: ${quickTask.estimatedTime}小时`}
+                          >
+                            {quickTask.estimatedTime}h
+                          </div>
+                        )}
+                        
                         {/* 拖拽手柄 - 只在有内容时显示 */}
                         {hasContent && (
                           <div 
