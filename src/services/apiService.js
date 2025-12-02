@@ -760,6 +760,12 @@ class DataSyncService {
       merged.yearGoals = Array.isArray(cloudData.yearGoals) ? cloudData.yearGoals : [];
     }
     
+    // 8. 合并 okrData（OKR数据）
+    if (cloudData.okrData !== undefined) {
+      console.log('🔄 合并 okrData');
+      merged.okrData = cloudData.okrData; // 云端数据优先
+    }
+    
     console.log('✅ 合并完成，最终数据键:', Object.keys(merged));
     return merged;
   }
@@ -982,6 +988,16 @@ export const dataAPI = {
       }
     }
     
+    // 获取 OKR 数据
+    const okrData = localStorage.getItem('okrData');
+    if (okrData) {
+      try {
+        baseData.okrData = JSON.parse(okrData);
+      } catch (error) {
+        console.warn('Failed to parse okrData:', error);
+      }
+    }
+    
     console.log('getAllData - 完整数据:', baseData);
     return baseData;
   },
@@ -997,6 +1013,7 @@ export const dataAPI = {
       taskTimeRecords, 
       totalWorkingHours,
       yearGoals,
+      okrData,
       ...baseData 
     } = data;
     
@@ -1026,6 +1043,11 @@ export const dataAPI = {
       const goalsArray = Array.isArray(yearGoals) ? yearGoals : [];
       localStorage.setItem('yearGoals', JSON.stringify(goalsArray));
       console.log('已保存 yearGoals:', goalsArray);
+    }
+    
+    if (okrData !== undefined) {
+      localStorage.setItem('okrData', JSON.stringify(okrData));
+      console.log('已保存 okrData:', okrData);
     }
     
     // 保存其他数据到 schedule_data

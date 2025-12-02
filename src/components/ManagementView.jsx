@@ -4,6 +4,7 @@ import Navigation from './Navigation';
 import DataManager from './DataManager';
 import { format, parseISO } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
+import { dataAPI } from '../services/apiService';
 
 // 默认的4个核心O
 const defaultObjectives = [
@@ -78,6 +79,22 @@ const ManagementView = ({ currentView, onViewChange }) => {
     }
   }, []);
 
+  // 监听云端数据更新
+  useEffect(() => {
+    const handleDataUpdate = (event) => {
+      const newData = event.detail;
+      if (newData && newData.okrData) {
+        console.log('🔄 检测到云端OKR数据更新，刷新界面');
+        setOkrData(newData.okrData);
+      }
+    };
+
+    window.addEventListener('data-updated', handleDataUpdate);
+    return () => {
+      window.removeEventListener('data-updated', handleDataUpdate);
+    };
+  }, []);
+
   // 加载任务数据
   useEffect(() => {
     const quickTasks = localStorage.getItem('quickTasks');
@@ -115,10 +132,38 @@ const ManagementView = ({ currentView, onViewChange }) => {
     }
   }, []);
 
-  // 保存OKR数据
-  const saveOkrData = (data) => {
+  // 保存OKR数据到本地（不触发云端同步）
+  const saveOkrDataLocal = (data) => {
     setOkrData(data);
     localStorage.setItem('okrData', JSON.stringify(data));
+  };
+
+  // 保存OKR数据并同步到云端
+  const saveOkrDataWithSync = async (data) => {
+    setOkrData(data);
+    localStorage.setItem('okrData', JSON.stringify(data));
+    
+    // 触发云端同步
+    try {
+      const fullData = dataAPI.getAllData();
+      fullData.okrData = data;
+      await dataAPI.saveData(fullData);
+      console.log('✅ OKR数据已同步到云端');
+    } catch (error) {
+      console.warn('⚠️ OKR数据云端同步失败:', error);
+    }
+  };
+
+  // 触发云端同步（基于当前状态）
+  const syncToCloud = async () => {
+    try {
+      const fullData = dataAPI.getAllData();
+      fullData.okrData = okrData;
+      await dataAPI.saveData(fullData);
+      console.log('✅ OKR数据已同步到云端');
+    } catch (error) {
+      console.warn('⚠️ OKR数据云端同步失败:', error);
+    }
   };
 
   // 添加关键结果
@@ -141,11 +186,11 @@ const ManagementView = ({ currentView, onViewChange }) => {
       return obj;
     });
 
-    saveOkrData({ ...okrData, objectives: updatedObjectives });
+    saveOkrDataWithSync({ ...okrData, objectives: updatedObjectives });
     setEditingKeyResult(newKeyResult.id);
   };
 
-  // 更新关键结果
+  // 更新关键结果（只更新本地状态，不同步云端）
   const updateKeyResult = (objectiveId, krId, field, value) => {
     const updatedObjectives = okrData.objectives.map(obj => {
       if (obj.id === objectiveId) {
@@ -159,7 +204,13 @@ const ManagementView = ({ currentView, onViewChange }) => {
       return obj;
     });
 
-    saveOkrData({ ...okrData, objectives: updatedObjectives });
+    saveOkrDataLocal({ ...okrData, objectives: updatedObjectives });
+  };
+
+  // 完成编辑关键结果（触发云端同步）
+  const finishEditingKeyResult = async () => {
+    setEditingKeyResult(null);
+    await syncToCloud();
   };
 
   // 删除关键结果
@@ -176,7 +227,7 @@ const ManagementView = ({ currentView, onViewChange }) => {
       return obj;
     });
 
-    saveOkrData({ ...okrData, objectives: updatedObjectives });
+    saveOkrDataWithSync({ ...okrData, objectives: updatedObjectives });
   };
 
   // 切换KR展开/折叠
@@ -244,14 +295,26 @@ const ManagementView = ({ currentView, onViewChange }) => {
       </div>
 
       {/* 周期选择 */}
-      <div className="bg-white rounded-lg border border-gray-200 p-3">
+      <div className="bg-white rounded-lg border border-gray-200 p-3 flex items-center space-x-2">
         <input
           type="text"
           value={okrData.period}
-          onChange={(e) => saveOkrData({ ...okrData, period: e.target.value })}
-          className="px-3 py-1.5 border border-gray-300 rounded-md text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
+          onChange={(e) => saveOkrDataLocal({ ...okrData, period: e.target.value })}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.target.blur();
+              syncToCloud();
+            }
+          }}
+          className="flex-1 px-3 py-1.5 border border-gray-300 rounded-md text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
           placeholder="如：Q1 2025 或 2025年度"
         />
+        <button
+          onClick={syncToCloud}
+          className="px-3 py-1.5 bg-blue-500 text-white rounded-md text-sm hover:bg-blue-600 transition-colors"
+        >
+          保存
+        </button>
       </div>
 
       {/* 4个O横向排列 */}
@@ -318,7 +381,7 @@ const ManagementView = ({ currentView, onViewChange }) => {
                                 <option value="万">万</option>
                               </select>
                               <button
-                                onClick={() => setEditingKeyResult(null)}
+                                onClick={finishEditingKeyResult}
                                 className="px-2 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600"
                               >
                                 完成
