@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import pako from 'pako';
 
 // 本地存储键名
 const STORAGE_KEYS = {
@@ -131,7 +132,19 @@ class DataSyncService {
         
         try {
           // 提取实际数据（去除 _metadata）
-          const { _metadata, ...actualCloudData } = cloudData;
+          const { _metadata, _compressed, _data, ...rawCloudData } = cloudData;
+          
+          // 检查是否为压缩格式并解压
+          let actualCloudData;
+          if (_compressed && _data) {
+            console.log('📦 检测到压缩数据，开始解压...');
+            actualCloudData = this.decompressData(_data);
+            console.log('✅ 数据解压完成');
+          } else {
+            // 兼容旧格式
+            actualCloudData = rawCloudData;
+          }
+          
           const localData = dataAPI.getAllData();
           
           // 比较数据是否真的不同
@@ -342,6 +355,57 @@ class DataSyncService {
     console.log('✅ Bin ID 已清除，下次保存时将创建新 Bin');
   }
 
+  // 压缩数据（使用 gzip 压缩）
+  compressData(data) {
+    try {
+      const jsonString = JSON.stringify(data);
+      const originalSize = new Blob([jsonString]).size;
+      
+      // 使用 pako 进行 gzip 压缩
+      const compressed = pako.gzip(jsonString);
+      
+      // 转换为 base64 以便存储
+      const base64 = btoa(String.fromCharCode.apply(null, compressed));
+      
+      const compressedSize = new Blob([base64]).size;
+      const ratio = ((1 - compressedSize / originalSize) * 100).toFixed(1);
+      
+      console.log(`📦 gzip 压缩: ${(originalSize / 1024).toFixed(2)}KB -> ${(compressedSize / 1024).toFixed(2)}KB (减少 ${ratio}%)`);
+      
+      return base64;
+    } catch (error) {
+      console.error('压缩失败:', error);
+      throw new Error('数据压缩失败');
+    }
+  }
+
+  // 解压数据（支持 gzip 和旧的 base64 格式）
+  decompressData(compressed) {
+    try {
+      // 尝试 gzip 解压
+      try {
+        // base64 转 Uint8Array
+        const binaryString = atob(compressed);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        
+        // gzip 解压
+        const decompressed = pako.ungzip(bytes, { to: 'string' });
+        return JSON.parse(decompressed);
+      } catch (gzipError) {
+        // 如果 gzip 解压失败，尝试旧的 base64 格式（向后兼容）
+        console.log('⚠️ gzip 解压失败，尝试旧格式...');
+        const jsonString = decodeURIComponent(escape(atob(compressed)));
+        return JSON.parse(jsonString);
+      }
+    } catch (error) {
+      console.error('解压失败:', error);
+      throw new Error('数据解压失败');
+    }
+  }
+
   // 上传数据到 JSONBin.io（确保上传完整数据）- 使用 latest 端点避免版本冲突
   async uploadToCloud(data) {
     try {
@@ -374,15 +438,21 @@ class DataSyncService {
         importantTasks: data.importantTasks ? data.importantTasks.length + '个' : '无'
       });
       
+      // 压缩数据以减小上传大小
+      const compressedData = this.compressData(data);
+      
       // JSONBin 直接接收数据，不需要包装
-      // 我们在数据中添加元数据字段
+      // 我们在数据中添加元数据字段，并标记数据已压缩
       const payload = {
-        ...data,
+        _compressed: true, // 标记数据已压缩
+        _data: compressedData, // 压缩后的数据
         _metadata: {
           userId: this.userId,
           lastUpdated: new Date().toISOString(),
-          version: '3.0',
-          dataKeys: Object.keys(data)
+          version: '3.2', // 版本号升级，表示使用 gzip 压缩格式
+          dataKeys: Object.keys(data),
+          compressed: true,
+          compressionType: 'gzip'
         }
       };
 
@@ -583,9 +653,21 @@ class DataSyncService {
       }
       
       // 提取我们的元数据和实际数据
-      const { _metadata, ...actualData } = parsedData;
+      const { _metadata, _compressed, _data, ...actualData } = parsedData;
       
       console.log('📊 元数据:', _metadata);
+      
+      // 检查是否为压缩格式
+      let finalData;
+      if (_compressed && _data) {
+        console.log('📦 检测到压缩数据，开始解压...');
+        finalData = this.decompressData(_data);
+        console.log('✅ 数据解压完成');
+      } else {
+        // 兼容旧格式（未压缩的数据）
+        console.log('📦 使用未压缩的数据格式');
+        finalData = actualData;
+      }
       
       // 检查用户ID是否匹配
       if (_metadata && _metadata.userId && _metadata.userId !== this.userId) {
@@ -617,7 +699,7 @@ class DataSyncService {
       this.setSyncStatus('success');
       
       // 返回实际数据（不包含 _metadata）
-      return actualData;
+      return finalData;
     } catch (error) {
       console.error('❌ 云端下载失败:', error);
       this.setSyncStatus('error');
