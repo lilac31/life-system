@@ -13,6 +13,7 @@ class DataSyncService {
   constructor() {
     this.userId = this.getUserId();
     this.gistId = null;
+    this._tokenPrompted = false; // 防止重复弹窗
   }
 
   // 获取或创建用户ID
@@ -72,15 +73,41 @@ class DataSyncService {
 
   // 获取API密钥
   getApiKey() {
+    console.log('🔍 getApiKey 被调用');
+    
     // 尝试从localStorage获取
     const savedKey = localStorage.getItem('github_token');
+    console.log('📦 localStorage.getItem("github_token"):', savedKey ? '✅ 存在 (长度: ' + savedKey.length + ')' : '❌ 不存在');
+    
     if (savedKey) {
+      console.log('✅ 返回保存的 Token');
       return savedKey;
     }
     
     // 尝试从环境变量获取
-    if (import.meta.env.VITE_GITHUB_TOKEN) {
-      return import.meta.env.VITE_GITHUB_TOKEN;
+    const envToken = import.meta.env.VITE_GITHUB_TOKEN;
+    console.log('🌍 环境变量 Token:', envToken ? '✅ 存在' : '❌ 不存在');
+    
+    if (envToken) {
+      console.log('✅ 返回环境变量 Token');
+      return envToken;
+    }
+    
+    // 如果都没有，弹出提示让用户输入
+    console.error('❌ 没有找到任何 Token！');
+    
+    // 使用 prompt 让用户输入
+    if (typeof window !== 'undefined' && !this._tokenPrompted) {
+      this._tokenPrompted = true;
+      const userToken = prompt('请输入你的 GitHub Personal Access Token\n\n获取方式：\n1. 访问 https://github.com/settings/tokens\n2. 创建新 Token，勾选 gist 权限\n3. 复制 Token 粘贴到这里');
+      
+      if (userToken && userToken.trim()) {
+        localStorage.setItem('github_token', userToken.trim());
+        localStorage.setItem('sync_provider', 'gist');
+        console.log('✅ Token 已保存！刷新页面...');
+        setTimeout(() => location.reload(), 500);
+        return userToken.trim();
+      }
     }
     
     throw new Error('No GitHub token configured');
