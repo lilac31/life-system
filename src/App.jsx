@@ -11,7 +11,7 @@ import PsychologyStudy from './components/PsychologyStudy';
 
 import AddTaskModal from './components/AddTaskModal';
 import SyncStatus from './components/SyncStatus';
-import SyncSettings from './components/SyncSettings';
+import GistSyncConfig from './components/GistSyncConfig';
 import SyncDebugger from './components/SyncDebugger';
 import DataImportExport from './components/DataImportExport';
 import DataDebugger from './components/DataDebugger';
@@ -225,7 +225,10 @@ function App() {
       </div>
 
       {showSyncSettings && (
-        <SyncSettings onClose={() => setShowSyncSettings(false)} />
+        <GistSyncConfig 
+          isOpen={showSyncSettings}
+          onClose={() => setShowSyncSettings(false)} 
+        />
       )}
 
       {showDebugger && <SyncDebugger />}
