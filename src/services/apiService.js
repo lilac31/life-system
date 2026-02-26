@@ -41,7 +41,7 @@ class DataSyncService {
   }
 
   // 启动轮询检查云端数据更新
-  startPolling(intervalMs = 30000) { // 默认30秒检查一次（降低API调用频率）
+  startPolling(intervalMs = 10000) { // 默认10秒检查一次（更快的同步）
     if (this.isPolling) {
       console.log('轮询已在运行中');
       return;
@@ -957,8 +957,8 @@ export const useDataSync = () => {
       window.dispatchEvent(new CustomEvent('data-updated', { detail: newData }));
     });
 
-    // 启动轮询（30秒检查一次，降低API调用频率）
-    dataSyncService.startPolling(30000);
+    // 启动轮询（10秒检查一次，更快的同步体验）
+    dataSyncService.startPolling(10000);
 
     return () => {
       dataSyncService.stopPolling();
