@@ -1,293 +1,32 @@
 import { useState, useEffect } from 'react';
-import pako from 'pako';
 
 // 本地存储键名
 const STORAGE_KEYS = {
   SCHEDULE_DATA: 'schedule_data',
   USER_ID: 'user_id',
   SYNC_STATUS: 'sync_status',
-  LAST_SYNC: 'last_sync',
-  LAST_CLOUD_UPDATE: 'last_cloud_update'
+  LAST_SYNC: 'last_sync'
 };
 
-// 数据同步服务 - 使用JSONBin.io作为免费云存储
+// 数据同步服务 - 使用GitHub Gist作为免费云存储
 class DataSyncService {
   constructor() {
-    this.userId = null;
-    this.binId = null;
-    this.pollingInterval = null;
-    this.isPolling = false;
-    this.listeners = new Set();
-    this.lastSyncTime = 0; // 上次同步时间
-    this.syncDebounceTime = 5000; // 防抖时间：5秒
-    this.isSyncing = false; // 是否正在同步
+    this.userId = this.getUserId();
+    this.gistId = null;
   }
 
-  // 添加数据变更监听器
-  addDataChangeListener(callback) {
-    this.listeners.add(callback);
-    return () => this.listeners.delete(callback);
-  }
-
-  // 通知所有监听器数据已变更
-  notifyDataChange(data) {
-    this.listeners.forEach(callback => {
-      try {
-        callback(data);
-      } catch (error) {
-        console.error('Error in data change listener:', error);
-      }
-    });
-  }
-
-  // 启动轮询检查云端数据更新
-  startPolling(intervalMs = 10000) { // 默认10秒检查一次（更快的同步）
-    if (this.isPolling) {
-      console.log('轮询已在运行中');
-      return;
+  // 获取或创建用户ID
+  getUserId() {
+    let userId = localStorage.getItem(STORAGE_KEYS.USER_ID);
+    if (!userId) {
+      // 使用固定的用户ID，确保不同浏览器可以使用相同的ID
+      userId = 'life_system_user_2025';
+      localStorage.setItem(STORAGE_KEYS.USER_ID, userId);
+      console.log('创建新的用户ID:', userId);
+    } else {
+      console.log('使用现有用户ID:', userId);
     }
-
-    console.log('启动云端数据轮询，间隔:', intervalMs, 'ms');
-    this.isPolling = true;
-
-    // 立即执行一次检查
-    this.checkCloudUpdates();
-
-    // 定期检查
-    this.pollingInterval = setInterval(() => {
-      this.checkCloudUpdates();
-    }, intervalMs);
-  }
-
-  // 停止轮询
-  stopPolling() {
-    if (this.pollingInterval) {
-      clearInterval(this.pollingInterval);
-      this.pollingInterval = null;
-      this.isPolling = false;
-      console.log('停止云端数据轮询');
-    }
-  }
-
-  // 检查云端数据是否有更新 - 使用 /latest 端点避免版本冲突
-  async checkCloudUpdates() {
-    try {
-      // 确保已配置 JSONBin API Key
-      try {
-        const apiKey = this.getApiKey();
-        if (!apiKey) {
-          console.log('⚠️ 未配置 JSONBin API Key，跳过云端检查');
-          return;
-        }
-      } catch (error) {
-        console.log('⚠️ 获取API密钥失败，跳过云端检查:', error.message);
-        return;
-      }
-
-      // 确保已获取 Bin ID
-      await this.getUserId();
-
-      if (!this.binId) {
-        console.log('📭 未找到云端 Bin，跳过检查');
-        return;
-      }
-
-      // 直接使用 /latest 端点获取数据，避免使用 /meta 端点
-      const apiKey = this.getApiKey();
-      console.log('🔍 使用 /latest 端点检查云端更新...');
-      
-      const response = await fetch(`https://api.jsonbin.io/v3/b/${this.binId}/latest`, {
-        headers: {
-          'X-Master-Key': apiKey
-        }
-      });
-
-      if (!response.ok) {
-        if (response.status === 404) {
-          console.warn('📭 Bin 不存在，清除本地 Bin ID');
-          this.binId = null;
-          localStorage.removeItem('jsonbin_id');
-        } else {
-          console.warn('⚠️ 获取云端数据失败:', response.status);
-        }
-        return;
-      }
-
-      const result = await response.json();
-      const cloudData = result.record;
-      
-      if (!cloudData || !cloudData._metadata) {
-        console.log('⚠️ 云端数据格式异常，跳过检查');
-        return;
-      }
-
-      const cloudUpdateTime = cloudData._metadata.lastUpdated;
-      const localUpdateTime = localStorage.getItem(STORAGE_KEYS.LAST_CLOUD_UPDATE);
-
-      console.log('🔍 检查云端更新 - 云端时间:', cloudUpdateTime, '本地时间:', localUpdateTime);
-
-      // 如果云端数据更新时间晚于本地记录的时间，说明有新数据
-      if (!localUpdateTime || new Date(cloudUpdateTime) > new Date(localUpdateTime)) {
-        console.log('🆕 检测到云端数据更新，开始同步...');
-        
-        try {
-          // 提取实际数据（去除 _metadata）
-          const { _metadata, _compressed, _data, ...rawCloudData } = cloudData;
-          
-          // 检查是否为压缩格式并解压
-          let actualCloudData;
-          if (_compressed && _data) {
-            console.log('📦 检测到压缩数据，开始解压...');
-            actualCloudData = this.decompressData(_data);
-            console.log('✅ 数据解压完成');
-          } else {
-            // 兼容旧格式
-            actualCloudData = rawCloudData;
-          }
-          
-          const localData = dataAPI.getAllData();
-          
-          // 比较数据是否真的不同
-          if (JSON.stringify(actualCloudData) !== JSON.stringify(localData)) {
-            console.log('🔄 云端数据与本地不同，开始合并...');
-            const mergedData = this.mergeData(localData, actualCloudData);
-            
-            // 保存合并后的数据（不触发上传，避免循环）
-            const { saveData, ...otherAPIs } = dataAPI;
-            Object.keys(mergedData).forEach(key => {
-              if (key === 'weeklyImportantTasks') {
-                localStorage.setItem('weeklyImportantTasks', JSON.stringify(mergedData[key]));
-              } else if (key === 'quickTasks') {
-                localStorage.setItem('quickTasks', JSON.stringify(mergedData[key]));
-              } else if (key === 'taskTimeRecords') {
-                localStorage.setItem('taskTimeRecords', JSON.stringify(mergedData[key]));
-              } else if (key === 'totalWorkingHours') {
-                localStorage.setItem('totalWorkingHours', mergedData[key].toString());
-              } else if (key === 'yearGoals') {
-                localStorage.setItem('yearGoals', JSON.stringify(mergedData[key]));
-              }
-            });
-            
-            // 保存基础数据
-            const { weeklyImportantTasks, quickTasks, taskTimeRecords, totalWorkingHours, yearGoals, ...baseData } = mergedData;
-            this.saveLocalData(baseData);
-            
-            localStorage.setItem(STORAGE_KEYS.LAST_CLOUD_UPDATE, cloudUpdateTime);
-            
-            // 通知监听器数据已更新
-            this.notifyDataChange(mergedData);
-            
-            console.log('✅ 云端数据已同步到本地');
-          } else {
-            console.log('✅ 云端数据与本地相同，无需更新');
-            localStorage.setItem(STORAGE_KEYS.LAST_CLOUD_UPDATE, cloudUpdateTime);
-          }
-        } catch (error) {
-          console.error('❌ 同步云端数据失败:', error);
-        }
-      } else {
-        console.log('✅ 云端数据未更新');
-      }
-    } catch (error) {
-      console.error('❌ 检查云端更新失败:', error);
-    }
-  }
-
-  // 基于 API Key 生成稳定的用户ID（SHA-256哈希）
-  async generateUserIdFromApiKey(apiKey) {
-    // 使用 Web Crypto API 生成 SHA-256 哈希
-    const encoder = new TextEncoder();
-    const data = encoder.encode(apiKey);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-    
-    // 取前16位作为用户ID（保持简短）
-    return `user_${hashHex.substring(0, 16)}`;
-  }
-
-  // 获取或创建用户ID（自动基于 API Key 生成）
-  async getUserId() {
-    try {
-      // 获取 API Key
-      const apiKey = this.getApiKey();
-      
-      // 基于 API Key 生成稳定的用户ID
-      const generatedUserId = await this.generateUserIdFromApiKey(apiKey);
-      
-      // 检查本地是否已有用户ID
-      const savedUserId = localStorage.getItem(STORAGE_KEYS.USER_ID);
-      
-      if (savedUserId && savedUserId !== generatedUserId) {
-        // 如果本地保存的用户ID与生成的不一致，说明可能更换了API Key
-        console.warn('⚠️ 检测到API Key已更换，更新用户ID');
-        localStorage.setItem(STORAGE_KEYS.USER_ID, generatedUserId);
-        // 清除旧的 Bin ID，因为新的用户ID需要新的数据
-        localStorage.removeItem('jsonbin_id');
-        this.binId = null;
-      } else if (!savedUserId) {
-        // 首次使用，保存生成的用户ID
-        console.log('✨ 首次使用，基于API Key生成用户ID');
-        localStorage.setItem(STORAGE_KEYS.USER_ID, generatedUserId);
-      }
-      
-      this.userId = generatedUserId;
-      console.log('📱 当前用户ID:', generatedUserId);
-      console.log('🔑 基于 API Key 自动生成，所有使用相同 API Key 的设备将拥有相同的用户ID');
-      
-      // 从本地存储获取 Bin ID
-      const savedBinId = localStorage.getItem('jsonbin_id');
-      if (savedBinId) {
-        this.binId = savedBinId;
-        console.log('📦 使用已保存的 Bin ID:', this.binId);
-      } else {
-        // 如果本地没有 Bin ID，将在首次保存时创建
-        console.log('📭 本地无 Bin ID，将在首次保存时创建');
-        console.log('💡 如需同步已有数据，请在同步设置中输入 Bin ID');
-      }
-      
-      return generatedUserId;
-    } catch (error) {
-      console.error('获取用户ID失败:', error);
-      throw error;
-    }
-  }
-  
-  // 重新初始化服务（用户ID变更时调用）
-  async reinitialize() {
-    console.log('🔄 重新初始化同步服务...');
-    
-    // 清除当前状态
-    this.userId = null;
-    this.binId = null;
-    
-    // 重新获取用户ID
-    await this.getUserId();
-    
-    // 尝试从云端下载该用户的数据
-    try {
-      const cloudData = await this.downloadFromCloud();
-      // downloadFromCloud 已经验证了用户ID，如果到这里说明验证通过
-      console.log('✅ 找到匹配的云端数据，开始同步');
-      await dataAPI.saveData(cloudData);
-      return true;
-    } catch (error) {
-      if (error.message.includes('User ID mismatch')) {
-        console.error('❌ 云端数据属于其他用户！');
-        throw new Error('云端数据的用户ID与当前用户ID不匹配，请确认用户ID是否正确');
-      }
-      console.log('📭 未找到云端数据，将在下次保存时上传');
-      // 上传当前用户的数据
-      try {
-        const localData = dataAPI.getAllData();
-        await this.uploadToCloud(localData);
-        console.log('✅ 本地数据已上传到云端');
-      } catch (uploadError) {
-        console.warn('⚠️ 上传失败:', uploadError);
-      }
-    }
-    
-    return false;
+    return userId;
   }
 
   // 获取本地数据
@@ -333,567 +72,209 @@ class DataSyncService {
 
   // 获取API密钥
   getApiKey() {
-    // 尝试从localStorage获取 JSONBin API Key
-    const savedKey = localStorage.getItem('jsonbin_api_key');
+    // 尝试从localStorage获取
+    const savedKey = localStorage.getItem('github_token');
     if (savedKey) {
       return savedKey;
     }
     
     // 尝试从环境变量获取
-    if (import.meta.env.VITE_JSONBIN_API_KEY) {
-      return import.meta.env.VITE_JSONBIN_API_KEY;
+    if (import.meta.env.VITE_GITHUB_TOKEN) {
+      return import.meta.env.VITE_GITHUB_TOKEN;
     }
     
-    throw new Error('No JSONBin API Key configured');
+    throw new Error('No GitHub token configured');
   }
 
-  // 清理无效的 Bin ID（当遇到 404 错误时调用）
-  clearInvalidBinId() {
-    console.warn('🗑️ 清理无效的 Bin ID:', this.binId);
-    this.binId = null;
-    localStorage.removeItem('jsonbin_id');
-    console.log('✅ Bin ID 已清除，下次保存时将创建新 Bin');
-  }
-
-  // 压缩数据（使用 gzip 压缩）
-  compressData(data) {
-    try {
-      const jsonString = JSON.stringify(data);
-      const originalSize = new Blob([jsonString]).size;
-      
-      // 使用 pako 进行 gzip 压缩
-      const compressed = pako.gzip(jsonString);
-      
-      // 转换为 base64 以便存储
-      const base64 = btoa(String.fromCharCode.apply(null, compressed));
-      
-      const compressedSize = new Blob([base64]).size;
-      const ratio = ((1 - compressedSize / originalSize) * 100).toFixed(1);
-      
-      console.log(`📦 gzip 压缩: ${(originalSize / 1024).toFixed(2)}KB -> ${(compressedSize / 1024).toFixed(2)}KB (减少 ${ratio}%)`);
-      
-      return base64;
-    } catch (error) {
-      console.error('压缩失败:', error);
-      throw new Error('数据压缩失败');
-    }
-  }
-
-  // 解压数据（支持 gzip 和旧的 base64 格式）
-  decompressData(compressed) {
-    try {
-      // 尝试 gzip 解压
-      try {
-        // base64 转 Uint8Array
-        const binaryString = atob(compressed);
-        const bytes = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) {
-          bytes[i] = binaryString.charCodeAt(i);
-        }
-        
-        // gzip 解压
-        const decompressed = pako.ungzip(bytes, { to: 'string' });
-        return JSON.parse(decompressed);
-      } catch (gzipError) {
-        // 如果 gzip 解压失败，尝试旧的 base64 格式（向后兼容）
-        console.log('⚠️ gzip 解压失败，尝试旧格式...');
-        const jsonString = decodeURIComponent(escape(atob(compressed)));
-        return JSON.parse(jsonString);
-      }
-    } catch (error) {
-      console.error('解压失败:', error);
-      throw new Error('数据解压失败');
-    }
-  }
-
-  // 上传数据到 JSONBin.io（确保上传完整数据）- 使用 latest 端点避免版本冲突
+  // 上传数据到GitHub Gist
   async uploadToCloud(data) {
     try {
-      // 防抖检查：如果距离上次同步不到5秒，跳过
-      const now = Date.now();
-      if (now - this.lastSyncTime < this.syncDebounceTime) {
-        console.log('⏭️  跳过同步（距离上次同步不到5秒）');
-        return;
-      }
+      const token = this.getApiKey();
+      console.log('开始上传数据到GitHub Gist，gistId:', this.gistId);
       
-      // 如果正在同步，跳过
-      if (this.isSyncing) {
-        console.log('⏭️  跳过同步（已有同步任务在进行中）');
-        return;
-      }
-      
-      this.isSyncing = true;
-      this.lastSyncTime = now;
-      
-      // 确保已获取用户ID
-      await this.getUserId();
-      
-      const apiKey = this.getApiKey();
-      console.log('🚀 开始上传完整数据到 JSONBin.io');
-      console.log('📦 上传的数据包含:', {
-        weeklyImportantTasks: data.weeklyImportantTasks ? Object.keys(data.weeklyImportantTasks).length + '周' : '无',
-        quickTasks: data.quickTasks ? Object.keys(data.quickTasks).length + '天' : '无',
-        taskTimeRecords: data.taskTimeRecords ? Object.keys(data.taskTimeRecords || {}).length + '条' : '无',
-        weeks: data.weeks ? Object.keys(data.weeks).length + '周' : '无',
-        importantTasks: data.importantTasks ? data.importantTasks.length + '个' : '无'
-      });
-      
-      // 压缩数据以减小上传大小
-      const compressedData = this.compressData(data);
-      
-      // JSONBin 直接接收数据，不需要包装
-      // 我们在数据中添加元数据字段，并标记数据已压缩
-      const payload = {
-        _compressed: true, // 标记数据已压缩
-        _data: compressedData, // 压缩后的数据
-        _metadata: {
-          userId: this.userId,
-          lastUpdated: new Date().toISOString(),
-          version: '3.2', // 版本号升级，表示使用 gzip 压缩格式
-          dataKeys: Object.keys(data),
-          compressed: true,
-          compressionType: 'gzip'
+      const gistData = {
+        description: 'Life System Schedule Data',
+        public: false,
+        files: {
+          'schedule-data.json': {
+            content: JSON.stringify({
+              data,
+              userId: this.userId,
+              lastUpdated: new Date().toISOString()
+            })
+          }
         }
       };
 
       const headers = {
-        'Content-Type': 'application/json',
-        'X-Master-Key': apiKey,
-        'X-Bin-Versioning': 'false' // 全局禁用版本控制
+        'Authorization': `token ${token}`,
+        'Content-Type': 'application/json'
       };
 
       let response;
-      let binId = this.binId;
       
-      // 验证 Bin ID 格式
-      if (binId && !/^[a-f0-9]{24}$/i.test(binId)) {
-        console.warn('⚠️ Bin ID 格式无效:', binId, '- 将创建新 Bin');
-        binId = null;
-        this.binId = null;
-        localStorage.removeItem('jsonbin_id');
-      }
-      
-      if (binId) {
-        // 更新已存在的 Bin - 使用正确的端点（不带 /latest）
-        console.log('📝 更新 Bin:', binId);
-        
-        try {
-          response = await fetch(`https://api.jsonbin.io/v3/b/${binId}`, {
-            method: 'PUT',
-            headers,
-            body: JSON.stringify(payload)
-          });
-          
-          if (!response.ok) {
-            const errorText = await response.text();
-            console.error('❌ 更新 Bin 失败:', response.status, errorText);
-            
-            // 不要自动清除 Bin ID！让用户知道出错了
-            throw new Error(`更新 Bin 失败 (${response.status}): ${errorText}`);
-          } else {
-            console.log('✅ Bin 更新成功');
-          }
-        } catch (fetchError) {
-          console.error('❌ 更新请求错误:', fetchError);
-          // 不创建新 Bin，直接抛出错误
-          throw fetchError;
-        }
-      }
-      
-      // 如果没有 binId，创建新 bin（只在首次使用时）
-      if (!binId) {
-        console.log('✨ 首次使用，创建新 Bin');
-        // 使用用户ID作为 Bin 名称的一部分，方便识别
-        headers['X-Bin-Name'] = `life-system-${this.userId}`;
-        
-        response = await fetch('https://api.jsonbin.io/v3/b', {
+      if (this.gistId) {
+        // 更新现有gist
+        response = await fetch(`https://api.github.com/gists/${this.gistId}`, {
+          method: 'PATCH',
+          headers,
+          body: JSON.stringify(gistData)
+        });
+      } else {
+        // 创建新gist
+        response = await fetch('https://api.github.com/gists', {
           method: 'POST',
           headers,
-          body: JSON.stringify(payload)
+          body: JSON.stringify(gistData)
         });
-        
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error('❌ 创建 Bin 失败:', response.status, errorText);
-          throw new Error(`创建 Bin 失败: ${response.status} ${errorText}`);
-        }
       }
 
-      // 检查响应是否成功
-      if (!response || !response.ok) {
-        const errorText = response ? await response.text() : '无响应';
-        console.error('❌ 请求失败:', response?.status || 'unknown', errorText);
-        
-        try {
-          const errorJson = JSON.parse(errorText);
-          console.error('❌ 错误详情:', errorJson);
-        } catch (e) {
-          // 忽略 JSON 解析错误
-        }
-        
-        throw new Error(`操作失败: ${response?.status || 'unknown'} ${errorText}`);
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('上传请求失败:', response.status, errorText);
+        throw new Error(`Failed to upload data to cloud: ${response.status} ${errorText}`);
       }
 
       const result = await response.json();
-      console.log('✅ 操作成功!');
+      console.log('上传响应:', result);
       
-      // 只在创建新 Bin 时保存 Bin ID（更新时不需要）
-      if (!binId) {
-        // JSONBin 返回的 Bin ID
-        const newBinId = result.metadata?.parentId || result.metadata?.id;
-        
-        if (!newBinId) {
-          console.error('❌ 无法从响应中获取 Bin ID，完整响应:', result);
-          throw new Error('无法获取 Bin ID');
-        }
-        
-        console.log('✅ 新创建的 Bin ID:', newBinId);
-        
-        // 保存 Bin ID
-        this.binId = newBinId;
-        localStorage.setItem('jsonbin_id', newBinId);
-        
-        // 重要：在控制台显示 Bin ID，方便用户在其他设备配置
-        console.log('');
-        console.log('═══════════════════════════════════════════════════════');
-        console.log('🔑 重要：多设备同步配置');
-        console.log('═══════════════════════════════════════════════════════');
-        console.log('📱 如需在其他设备同步，请保存以下信息：');
-        console.log('');
-        console.log('   Bin ID:', newBinId);
-        console.log('');
-        console.log('💡 在其他设备上：');
-        console.log('   1. 配置相同的 API Key');
-        console.log('   2. 点击"使用已有数据"');
-        console.log('   3. 粘贴 Bin ID 并保存');
-        console.log('═══════════════════════════════════════════════════════');
-        console.log('');
-      } else {
-        console.log('✅ 数据已更新到 Bin:', binId);
+      if (!this.gistId) {
+        this.gistId = result.id;
+        localStorage.setItem('gist_id', result.id);
+        console.log('保存新的Gist ID:', result.id);
       }
-      
-      const updatedAt = result.metadata?.createdAt || 
-                       result.metadata?.updatedAt || 
-                       new Date().toISOString();
-      localStorage.setItem(STORAGE_KEYS.LAST_CLOUD_UPDATE, updatedAt);
 
       this.setSyncStatus('success');
-      this.isSyncing = false;
       return result;
     } catch (error) {
-      console.error('❌ 云端上传失败:', error);
+      console.error('Cloud upload failed:', error);
       this.setSyncStatus('error');
-      this.isSyncing = false;
       throw error;
     }
   }
 
-  // 验证 Bin 是否存在且可访问 - 使用 /latest 端点
-  async verifyBin(binId) {
-    try {
-      const apiKey = this.getApiKey();
-      const response = await fetch(`https://api.jsonbin.io/v3/b/${binId}/latest`, {
-        method: 'HEAD', // 只获取响应头，不获取数据体，节省流量
-        headers: {
-          'X-Master-Key': apiKey
-        }
-      });
-      
-      return response.ok;
-    } catch (error) {
-      console.warn('验证 Bin 失败:', error);
-      return false;
-    }
-  }
-
-  // 从 JSONBin.io 下载数据 - 使用 latest 端点避免版本冲突
+  // 从GitHub Gist下载数据
   async downloadFromCloud() {
     try {
-      // 确保已获取用户ID
-      await this.getUserId();
+      const token = this.getApiKey();
+      const gistId = localStorage.getItem('gist_id');
+      console.log('尝试下载云端数据，gistId:', gistId);
       
-      if (!this.binId) {
-        console.log('⚠️ 未找到 Bin ID，可能是首次使用');
+      if (!gistId) {
+        console.log('没有找到Gist ID，可能是首次使用');
         throw new Error('No cloud data found');
       }
-      
-      const apiKey = this.getApiKey();
-      console.log('📥 使用 /latest 端点下载云端数据，Bin ID:', this.binId);
-      
-      // 使用 /latest 端点获取最新版本，避免版本冲突
-      const response = await fetch(`https://api.jsonbin.io/v3/b/${this.binId}/latest`, {
+
+      const response = await fetch(`https://api.github.com/gists/${gistId}`, {
         headers: {
-          'X-Master-Key': apiKey
+          'Authorization': `token ${token}`
         }
       });
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('❌ 下载请求失败:', response.status, errorText);
-        
-        // 如果是 404，说明 Bin 不存在
-        if (response.status === 404) {
-          console.warn('📭 Bin 不存在，清除本地 Bin ID');
-          this.binId = null;
-          localStorage.removeItem('jsonbin_id');
-          throw new Error('No cloud data found');
-        }
-        
-        throw new Error(`下载失败: ${response.status}`);
+        console.error('下载请求失败:', response.status, errorText);
+        throw new Error(`Failed to download data from cloud: ${response.status} ${errorText}`);
       }
 
       const result = await response.json();
-      console.log('✅ 使用 /latest 端点下载成功');
+      console.log('下载到的Gist数据:', result);
       
-      // JSONBin 将数据存储在 record 字段中
-      const parsedData = result.record;
-      
-      if (!parsedData) {
-        throw new Error('响应中没有数据');
+      // 获取文件内容
+      const fileContent = result.files['schedule-data.json']?.content;
+      if (!fileContent) {
+        throw new Error('No data file found in gist');
       }
       
-      // 提取我们的元数据和实际数据
-      const { _metadata, _compressed, _data, ...actualData } = parsedData;
+      const parsedData = JSON.parse(fileContent);
       
-      console.log('📊 元数据:', _metadata);
-      
-      // 检查是否为压缩格式
-      let finalData;
-      if (_compressed && _data) {
-        console.log('📦 检测到压缩数据，开始解压...');
-        finalData = this.decompressData(_data);
-        console.log('✅ 数据解压完成');
+      // 确保数据来自同一用户
+      if (parsedData.userId === this.userId) {
+        this.setSyncStatus('success');
+        return parsedData.data;
       } else {
-        // 兼容旧格式（未压缩的数据）
-        console.log('📦 使用未压缩的数据格式');
-        finalData = actualData;
+        console.log('数据不属于当前用户:', parsedData.userId, 'vs', this.userId);
+        throw new Error('Data does not belong to current user');
       }
-      
-      // 检查用户ID是否匹配
-      if (_metadata && _metadata.userId && _metadata.userId !== this.userId) {
-        console.warn('⚠️ 警告：云端数据的用户ID与当前用户ID不匹配！');
-        console.warn('云端用户ID:', _metadata.userId);
-        console.warn('当前用户ID:', this.userId);
-        throw new Error('User ID mismatch - cloud data belongs to different user');
-      }
-      
-      console.log('✅ 用户ID验证通过');
-      
-      if (_metadata) {
-        console.log('✅ 找到元数据，版本:', _metadata.version);
-        console.log('📋 数据包含的键:', _metadata.dataKeys);
-        console.log('👤 用户ID:', _metadata.userId);
-        
-        // 确保数据来自同一用户（可选检查）
-        if (_metadata.userId && _metadata.userId !== this.userId) {
-          console.warn('⚠️ 数据来自不同用户 - 本地:', this.userId, '云端:', _metadata.userId);
-          // 不抛出错误，允许使用云端数据
-        }
-        
-        // 更新最后云端更新时间
-        if (_metadata.lastUpdated) {
-          localStorage.setItem(STORAGE_KEYS.LAST_CLOUD_UPDATE, _metadata.lastUpdated);
-        }
-      }
-      
-      this.setSyncStatus('success');
-      
-      // 返回实际数据（不包含 _metadata）
-      return finalData;
     } catch (error) {
-      console.error('❌ 云端下载失败:', error);
+      console.error('Cloud download failed:', error);
       this.setSyncStatus('error');
       throw error;
     }
   }
 
-  // 合并本地和云端数据（智能合并所有字段）
+  // 合并本地和云端数据
   mergeData(localData, cloudData) {
-    console.log('🔄 开始智能合并数据');
-    console.log('📦 本地数据键:', Object.keys(localData || {}));
-    console.log('☁️ 云端数据键:', Object.keys(cloudData || {}));
-    
-    // 如果云端数据为空或无效，返回本地数据
-    if (!cloudData || typeof cloudData !== 'object') {
-      console.log('⚠️ 云端数据无效，使用本地数据');
-      return localData;
-    }
-    
-    // 如果本地数据为空，返回云端数据
-    if (!localData || typeof localData !== 'object') {
-      console.log('⚠️ 本地数据无效，使用云端数据');
-      return cloudData;
-    }
+    // 简单的合并策略：优先使用最新修改的数据
+    // 这里可以根据需要实现更复杂的合并逻辑
     
     const merged = { ...localData };
     
-    // 1. 合并 weeklyImportantTasks（周重要任务）
-    if (cloudData.weeklyImportantTasks && typeof cloudData.weeklyImportantTasks === 'object') {
-      console.log('🔄 合并 weeklyImportantTasks');
-      if (!merged.weeklyImportantTasks) merged.weeklyImportantTasks = {};
-      
-      Object.keys(cloudData.weeklyImportantTasks).forEach(weekKey => {
-        // 云端数据优先（更新覆盖）
-        merged.weeklyImportantTasks[weekKey] = cloudData.weeklyImportantTasks[weekKey];
-      });
-    }
-    
-    // 2. 合并 quickTasks（快速任务）
-    if (cloudData.quickTasks && typeof cloudData.quickTasks === 'object') {
-      console.log('🔄 合并 quickTasks');
-      if (!merged.quickTasks) merged.quickTasks = {};
-      
-      Object.keys(cloudData.quickTasks).forEach(dayKey => {
-        // 云端数据优先
-        merged.quickTasks[dayKey] = cloudData.quickTasks[dayKey];
-      });
-    }
-    
-    // 3. 合并 taskTimeRecords（时间记录）
-    if (cloudData.taskTimeRecords && Array.isArray(cloudData.taskTimeRecords)) {
-      console.log('🔄 合并 taskTimeRecords');
-      const recordMap = new Map();
-      
-      // 先添加本地记录
-      if (localData.taskTimeRecords && Array.isArray(localData.taskTimeRecords)) {
-        localData.taskTimeRecords.forEach(record => {
-          recordMap.set(record.id || JSON.stringify(record), record);
-        });
-      }
-      
-      // 再添加云端记录（覆盖重复的）
-      cloudData.taskTimeRecords.forEach(record => {
-        recordMap.set(record.id || JSON.stringify(record), record);
-      });
-      
-      merged.taskTimeRecords = Array.from(recordMap.values());
-    }
-    
-    // 4. 合并 weeks 数据
-    if (cloudData.weeks && typeof cloudData.weeks === 'object') {
-      console.log('🔄 合并 weeks');
-      if (!merged.weeks) merged.weeks = {};
-      
-      Object.keys(cloudData.weeks).forEach(weekKey => {
+    // 合并weeks数据
+    Object.keys(cloudData.weeks || {}).forEach(weekKey => {
+      if (!localData.weeks[weekKey]) {
+        merged.weeks[weekKey] = cloudData.weeks[weekKey];
+      } else {
+        // 比较更新时间，选择更新的版本
+        const localWeek = localData.weeks[weekKey];
         const cloudWeek = cloudData.weeks[weekKey];
-        const localWeek = localData.weeks?.[weekKey];
         
-        if (!localWeek) {
-          // 本地没有这周的数据，直接使用云端数据
-          merged.weeks[weekKey] = cloudWeek;
-        } else {
-          // 合并每日任务
-          const mergedWeek = { ...cloudWeek }; // 云端数据优先
-          merged.weeks[weekKey] = mergedWeek;
-        }
-      });
-    }
-    
-    // 5. 合并 importantTasks（重要任务列表）
-    if (cloudData.importantTasks && Array.isArray(cloudData.importantTasks)) {
-      console.log('🔄 合并 importantTasks');
-      const taskMap = new Map();
-      
-      // 先添加本地任务
-      if (localData.importantTasks && Array.isArray(localData.importantTasks)) {
-        localData.importantTasks.forEach(task => {
-          taskMap.set(task.id, task);
+        // 合并每日任务
+        Object.keys(cloudWeek.days || {}).forEach(dayKey => {
+          if (!localWeek.days[dayKey]) {
+            localWeek.days[dayKey] = cloudWeek.days[dayKey];
+          }
         });
-      }
-      
-      // 再添加云端任务（会覆盖同ID的本地任务）
-      cloudData.importantTasks.forEach(task => {
-        taskMap.set(task.id, task);
-      });
-      
-      merged.importantTasks = Array.from(taskMap.values());
-    }
-    
-    // 6. 合并 timeRecords
-    if (cloudData.timeRecords && Array.isArray(cloudData.timeRecords)) {
-      console.log('🔄 合并 timeRecords');
-      const recordMap = new Map();
-      
-      if (localData.timeRecords && Array.isArray(localData.timeRecords)) {
-        localData.timeRecords.forEach(record => {
-          recordMap.set(record.id, record);
-        });
-      }
-      
-      cloudData.timeRecords.forEach(record => {
-        recordMap.set(record.id, record);
-      });
-      
-      merged.timeRecords = Array.from(recordMap.values());
-    }
-    
-    // 7. 合并其他字段（totalWorkingHours, yearGoals, settings等）
-    const simpleFields = ['totalWorkingHours', 'settings'];
-    simpleFields.forEach(field => {
-      if (cloudData[field] !== undefined) {
-        console.log(`🔄 合并 ${field}`);
-        merged[field] = cloudData[field]; // 云端数据优先
       }
     });
     
-    // 特殊处理 yearGoals，确保是数组
-    if (cloudData.yearGoals !== undefined) {
-      console.log('🔄 合并 yearGoals');
-      merged.yearGoals = Array.isArray(cloudData.yearGoals) ? cloudData.yearGoals : [];
+    // 合并重要任务
+    if (cloudData.importantTasks && cloudData.importantTasks.length > 0) {
+      const localIds = localData.importantTasks.map(task => task.id);
+      const newTasks = cloudData.importantTasks.filter(task => !localIds.includes(task.id));
+      merged.importantTasks = [...localData.importantTasks, ...newTasks];
     }
     
-    // 8. 合并 okrData（OKR数据）
-    if (cloudData.okrData !== undefined) {
-      console.log('🔄 合并 okrData');
-      merged.okrData = cloudData.okrData; // 云端数据优先
-    }
+    // 合并快速任务
+    Object.keys(cloudData.quickTasks || {}).forEach(weekKey => {
+      if (!localData.quickTasks[weekKey]) {
+        merged.quickTasks[weekKey] = cloudData.quickTasks[weekKey];
+      }
+    });
     
-    console.log('✅ 合并完成，最终数据键:', Object.keys(merged));
     return merged;
   }
 
-  // 同步数据（使用完整数据）
+  // 同步数据
   async syncData() {
     try {
-      // 确保已获取用户ID
-      await this.getUserId();
-      
-      console.log('🔄 开始同步数据...用户ID:', this.userId);
-      
-      // 获取完整的本地数据（包含所有分散存储的数据）
-      const localData = dataAPI.getAllData();
-      console.log('📦 本地完整数据:', localData);
+      console.log('开始同步数据...');
+      const localData = this.getLocalData();
+      console.log('本地数据:', localData);
       
       // 尝试从云端获取数据
       try {
-        console.log('☁️ 尝试从云端获取数据...');
+        console.log('尝试从云端获取数据...');
         const cloudData = await this.downloadFromCloud();
-        console.log('☁️ 云端数据:', cloudData);
-        
+        console.log('云端数据:', cloudData);
         const mergedData = this.mergeData(localData, cloudData);
-        console.log('🔀 合并后的数据:', mergedData);
+        this.saveLocalData(mergedData);
         
-        // 保存合并后的数据（使用 dataAPI.saveData 确保所有字段都正确保存）
-        await dataAPI.saveData(mergedData);
-        
-        // 上传合并后的数据到云端
-        console.log('⬆️ 上传合并后的数据到云端...');
+        // 上传合并后的数据
+        console.log('上传合并后的数据...');
         await this.uploadToCloud(mergedData);
         
-        console.log('✅ 同步成功！数据已合并并上传');
         return { success: true, data: mergedData, source: 'merged' };
       } catch (error) {
-        console.warn('⚠️ 云端数据获取失败，只上传本地数据:', error.message);
+        console.warn('云端数据获取失败，只上传本地数据:', error);
         
-        // 如果云端数据获取失败（首次使用或网络问题），只上传本地数据
-        console.log('⬆️ 上传本地数据到云端...');
+        // 如果云端数据获取失败，只上传本地数据
+        console.log('只上传本地数据:', localData);
         await this.uploadToCloud(localData);
-        
-        console.log('✅ 本地数据已上传到云端');
         return { success: true, data: localData, source: 'local' };
       }
     } catch (error) {
-      console.error('❌ 同步完全失败:', error);
+      console.error('同步完全失败:', error);
       return { success: false, error: error.message };
     }
   }
@@ -919,7 +300,6 @@ export const useDataSync = () => {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [syncStatus, setSyncStatus] = useState('pending');
   const [lastSync, setLastSync] = useState(null);
-  const [dataVersion, setDataVersion] = useState(0); // 用于触发重新渲染
 
   // 监听网络状态
   useEffect(() => {
@@ -934,37 +314,6 @@ export const useDataSync = () => {
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
-
-  // 启动轮询和监听数据变更
-  useEffect(() => {
-    if (!isOnline) {
-      dataSyncService.stopPolling();
-      return;
-    }
-
-    // 检查是否配置了 JSONBin API Key
-    const hasApiKey = localStorage.getItem('jsonbin_api_key');
-    if (!hasApiKey) {
-      console.log('未配置 JSONBin API Key，跳过轮询');
-      return;
-    }
-
-    // 添加数据变更监听器
-    const removeListener = dataSyncService.addDataChangeListener((newData) => {
-      console.log('检测到数据变更，触发重新渲染');
-      setDataVersion(prev => prev + 1);
-      // 触发全局事件，让其他组件知道数据已更新
-      window.dispatchEvent(new CustomEvent('data-updated', { detail: newData }));
-    });
-
-    // 启动轮询（10秒检查一次，更快的同步体验）
-    dataSyncService.startPolling(10000);
-
-    return () => {
-      dataSyncService.stopPolling();
-      removeListener();
-    };
-  }, [isOnline]);
 
   // 自动同步
   useEffect(() => {
@@ -1010,156 +359,26 @@ export const useDataSync = () => {
     syncStatus,
     lastSync,
     manualSync,
-    needsSync: dataSyncService.needsSync(),
-    dataVersion // 返回数据版本，用于触发依赖此hook的组件重新渲染
+    needsSync: dataSyncService.needsSync()
   };
 };
 
 // 数据操作API
 export const dataAPI = {
-  // 获取所有数据（包含所有localStorage中的数据）
+  // 获取所有数据
   getAllData: () => {
-    const baseData = dataSyncService.getLocalData();
-    
-    // 从localStorage中获取所有分散存储的数据
-    const weeklyImportantTasks = localStorage.getItem('weeklyImportantTasks');
-    if (weeklyImportantTasks) {
-      try {
-        baseData.weeklyImportantTasks = JSON.parse(weeklyImportantTasks);
-      } catch (error) {
-        console.warn('Failed to parse weeklyImportantTasks:', error);
-      }
-    }
-    
-    const quickTasks = localStorage.getItem('quickTasks');
-    if (quickTasks) {
-      try {
-        baseData.quickTasks = JSON.parse(quickTasks);
-      } catch (error) {
-        console.warn('Failed to parse quickTasks:', error);
-      }
-    }
-    
-    const taskTimeRecords = localStorage.getItem('taskTimeRecords');
-    if (taskTimeRecords) {
-      try {
-        baseData.taskTimeRecords = JSON.parse(taskTimeRecords);
-      } catch (error) {
-        console.warn('Failed to parse taskTimeRecords:', error);
-      }
-    }
-    
-    const totalWorkingHours = localStorage.getItem('totalWorkingHours');
-    if (totalWorkingHours) {
-      try {
-        baseData.totalWorkingHours = parseFloat(totalWorkingHours);
-      } catch (error) {
-        console.warn('Failed to parse totalWorkingHours:', error);
-      }
-    }
-    
-    const yearGoals = localStorage.getItem('yearGoals');
-    if (yearGoals) {
-      try {
-        const parsed = JSON.parse(yearGoals);
-        // 确保是数组格式
-        baseData.yearGoals = Array.isArray(parsed) ? parsed : [];
-      } catch (error) {
-        console.warn('Failed to parse yearGoals:', error);
-        baseData.yearGoals = [];
-      }
-    }
-    
-    // 获取 OKR 数据
-    const okrData = localStorage.getItem('okrData');
-    if (okrData) {
-      try {
-        baseData.okrData = JSON.parse(okrData);
-      } catch (error) {
-        console.warn('Failed to parse okrData:', error);
-      }
-    }
-    
-    console.log('getAllData - 完整数据:', baseData);
-    return baseData;
+    return dataSyncService.getLocalData();
   },
 
-  // 保存数据（处理所有分散存储的数据）
-  saveData: async (data) => {
-    console.log('saveData - 保存数据:', data);
+  // 保存数据
+  saveData: (data) => {
+    dataSyncService.saveLocalData(data);
     
-    // 分离所有分散存储的数据
-    const { 
-      weeklyImportantTasks, 
-      quickTasks, 
-      taskTimeRecords, 
-      totalWorkingHours,
-      yearGoals,
-      okrData,
-      ...baseData 
-    } = data;
-    
-    // 保存分散的数据到独立的localStorage键
-    if (weeklyImportantTasks !== undefined) {
-      localStorage.setItem('weeklyImportantTasks', JSON.stringify(weeklyImportantTasks));
-      console.log('已保存 weeklyImportantTasks:', weeklyImportantTasks);
-    }
-    
-    if (quickTasks !== undefined) {
-      localStorage.setItem('quickTasks', JSON.stringify(quickTasks));
-      console.log('已保存 quickTasks:', quickTasks);
-    }
-    
-    if (taskTimeRecords !== undefined) {
-      localStorage.setItem('taskTimeRecords', JSON.stringify(taskTimeRecords));
-      console.log('已保存 taskTimeRecords:', taskTimeRecords);
-    }
-    
-    if (totalWorkingHours !== undefined) {
-      localStorage.setItem('totalWorkingHours', totalWorkingHours.toString());
-      console.log('已保存 totalWorkingHours:', totalWorkingHours);
-    }
-    
-    if (yearGoals !== undefined) {
-      // 确保保存的是数组格式
-      const goalsArray = Array.isArray(yearGoals) ? yearGoals : [];
-      localStorage.setItem('yearGoals', JSON.stringify(goalsArray));
-      console.log('已保存 yearGoals:', goalsArray);
-    }
-    
-    if (okrData !== undefined) {
-      localStorage.setItem('okrData', JSON.stringify(okrData));
-      console.log('已保存 okrData:', okrData);
-    }
-    
-    // 保存其他数据到 schedule_data
-    dataSyncService.saveLocalData(baseData);
-    console.log('已保存 schedule_data:', baseData);
-    
-    // 如果在线，尝试同步到云端（包含所有数据）
+    // 如果在线，尝试同步到云端
     if (navigator.onLine) {
-      // 检查是否配置了 API Key
-      const hasApiKey = localStorage.getItem('jsonbin_api_key');
-      if (!hasApiKey) {
-        console.log('⚠️ 未配置 JSONBin API Key，跳过云端同步');
-        return;
-      }
-      
-      // 确保已获取用户ID
-      try {
-        await dataSyncService.getUserId();
-        console.log('🚀 触发后台云端同步...');
-        // 上传完整数据（包含所有分散的数据）
-        dataSyncService.uploadToCloud(data).then(() => {
-          console.log('✅ 后台同步成功');
-        }).catch(err => {
-          console.warn('⚠️ 后台同步失败，将在下次轮询时重试:', err.message);
-        });
-      } catch (error) {
-        console.warn('⚠️ 无法获取用户信息，跳过同步:', error);
-      }
-    } else {
-      console.log('📴 离线状态，数据已保存到本地');
+      dataSyncService.uploadToCloud(data).catch(err => {
+        console.warn('Background sync failed, will retry later');
+      });
     }
   },
 
@@ -1174,63 +393,35 @@ export const dataAPI = {
   },
 
   // 保存特定周的数据
-  saveWeekData: async (weekKey, weekData) => {
+  saveWeekData: (weekKey, weekData) => {
     const data = dataSyncService.getLocalData();
     data.weeks[weekKey] = weekData;
     dataSyncService.saveLocalData(data);
     
-    // 如果在线，尝试同步到云端（包含所有数据）
+    // 如果在线，尝试同步到云端
     if (navigator.onLine) {
-      const hasApiKey = localStorage.getItem('jsonbin_api_key');
-      if (!hasApiKey) {
-        console.log('⚠️ 未配置 JSONBin API Key，跳过云端同步');
-        return;
-      }
-      
-      try {
-        await dataSyncService.getUserId();
-        // 获取完整数据（包含所有分散存储的数据）
-        const fullData = dataAPI.getAllData();
-        console.log('🔄 保存周数据，同步完整数据到云端');
-        dataSyncService.uploadToCloud(fullData).catch(err => {
-          console.warn('⚠️ 后台同步失败，将在下次轮询时重试:', err.message);
-        });
-      } catch (error) {
-        console.warn('⚠️ 无法获取用户信息，跳过同步:', error);
-      }
+      dataSyncService.uploadToCloud(data).catch(err => {
+        console.warn('Background sync failed, will retry later');
+      });
     }
   },
 
   // 添加重要任务
-  addImportantTask: async (task) => {
+  addImportantTask: (task) => {
     const data = dataSyncService.getLocalData();
     if (!data.importantTasks) data.importantTasks = [];
     data.importantTasks.push(task);
     dataSyncService.saveLocalData(data);
     
     if (navigator.onLine) {
-      const hasApiKey = localStorage.getItem('jsonbin_api_key');
-      if (!hasApiKey) {
-        console.log('⚠️ 未配置 JSONBin API Key，跳过云端同步');
-        return;
-      }
-      
-      try {
-        await dataSyncService.getUserId();
-        // 获取完整数据
-        const fullData = dataAPI.getAllData();
-        console.log('🔄 添加重要任务，同步完整数据到云端');
-        dataSyncService.uploadToCloud(fullData).catch(err => {
-          console.warn('⚠️ 后台同步失败，将在下次轮询时重试:', err.message);
-        });
-      } catch (error) {
-        console.warn('⚠️ 无法获取用户信息，跳过同步:', error);
-      }
+      dataSyncService.uploadToCloud(data).catch(err => {
+        console.warn('Background sync failed, will retry later');
+      });
     }
   },
 
   // 更新重要任务
-  updateImportantTask: async (taskId, updates) => {
+  updateImportantTask: (taskId, updates) => {
     const data = dataSyncService.getLocalData();
     const taskIndex = data.importantTasks.findIndex(t => t.id === taskId);
     if (taskIndex !== -1) {
@@ -1238,51 +429,23 @@ export const dataAPI = {
       dataSyncService.saveLocalData(data);
       
       if (navigator.onLine) {
-        const hasApiKey = localStorage.getItem('jsonbin_api_key');
-        if (!hasApiKey) {
-          console.log('⚠️ 未配置 JSONBin API Key，跳过云端同步');
-          return;
-        }
-        
-        try {
-          await dataSyncService.getUserId();
-          // 获取完整数据
-          const fullData = dataAPI.getAllData();
-          console.log('🔄 更新重要任务，同步完整数据到云端');
-          dataSyncService.uploadToCloud(fullData).catch(err => {
-            console.warn('⚠️ 后台同步失败，将在下次轮询时重试:', err.message);
-          });
-        } catch (error) {
-          console.warn('⚠️ 无法获取用户信息，跳过同步:', error);
-        }
+        dataSyncService.uploadToCloud(data).catch(err => {
+          console.warn('Background sync failed, will retry later');
+        });
       }
     }
   },
 
   // 删除重要任务
-  deleteImportantTask: async (taskId) => {
+  deleteImportantTask: (taskId) => {
     const data = dataSyncService.getLocalData();
     data.importantTasks = data.importantTasks.filter(t => t.id !== taskId);
     dataSyncService.saveLocalData(data);
     
     if (navigator.onLine) {
-      const hasApiKey = localStorage.getItem('jsonbin_api_key');
-      if (!hasApiKey) {
-        console.log('⚠️ 未配置 JSONBin API Key，跳过云端同步');
-        return;
-      }
-      
-      try {
-        await dataSyncService.getUserId();
-        // 获取完整数据
-        const fullData = dataAPI.getAllData();
-        console.log('🔄 删除重要任务，同步完整数据到云端');
-        dataSyncService.uploadToCloud(fullData).catch(err => {
-          console.warn('⚠️ 后台同步失败，将在下次轮询时重试:', err.message);
-        });
-      } catch (error) {
-        console.warn('⚠️ 无法获取用户信息，跳过同步:', error);
-      }
+      dataSyncService.uploadToCloud(data).catch(err => {
+        console.warn('Background sync failed, will retry later');
+      });
     }
   }
 };
