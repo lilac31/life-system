@@ -12,8 +12,14 @@ const STORAGE_KEYS = {
 class DataSyncService {
   constructor() {
     this.userId = this.getUserId();
-    this.gistId = null;
+    this.gistId = localStorage.getItem('gist_id') || null; // 从 localStorage 读取
     this._tokenPrompted = false; // 防止重复弹窗
+    
+    if (this.gistId) {
+      console.log('✅ 使用已保存的 Gist ID:', this.gistId);
+    } else {
+      console.log('📭 首次使用，将创建新的 Gist');
+    }
   }
 
   // 获取或创建用户ID
